@@ -1,4 +1,3 @@
-\
 # Minimal Supabase CLI config. Install the CLI to use it locally:
 #   macOS: brew install supabase/tap/supabase
 #   or: npx supabase <command>   (no global install needed)
