@@ -91,19 +91,21 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
       `TournamentEditForm`) covering all §10 fields plus a status dropdown — admin can set any
       status directly (no state-machine guard yet; that belongs with the stage/match engine in
       later phases). Status starts `DRAFT` on create per §10.
-      **Verified:** `npm run build`/`lint` pass; confirmed the insert shape against the live
-      schema directly (`supabase db query --linked`, rolled back) — defaults (DRAFT/21/2/30)
-      populate correctly. **Not yet exercised through the actual browser UI/RLS-as-admin** —
-      only server-action code paths and schema shape are checked so far.
+      **Verified end-to-end** 2026-08-30: `npm run build`/`lint` pass; drove the real app in a
+      headless browser (Playwright, `next dev`) as a live admin account (created via the
+      Supabase Admin API, deleted after) — logged in, created a tournament through the dialog,
+      landed on its detail page, edited a field and saved (confirmed both the "Saved." UI
+      state and the actual DB row), no console errors. Test fixtures (tournament + admin user)
+      cleaned up afterward.
 - [x] **3.2 Tournament stage model** — `src/lib/validation/stage.ts`,
       `src/app/admin/tournaments/stage-actions.ts` (createStage/updateStage/deleteStage/
       moveStage), `StagesManager` embedded in the tournament detail page. New stages append
       at `max(stage_order)+1`; reordering swaps two rows through a temporary negative
       `stage_order` (the `unique (tournament_id, stage_order)` constraint isn't DEFERRABLE, so
       a direct two-row swap would collide mid-transaction).
-      **Verified:** `npm run build`/`lint` pass; the three-step reorder swap was exercised
-      directly against the live schema (`supabase db query --linked`, rolled back) and
-      produced the correct final order. Not yet exercised through the browser UI.
+      **Verified end-to-end** 2026-08-30: same Playwright session as 3.1 — added two stages,
+      clicked "Move up" on the second, confirmed both the on-screen reordering and the
+      underlying `stage_order` values in the DB swapped correctly, no console errors.
 - [ ] **3.3 Add players to tournament** — search-and-select existing players + inline "add new
       player" (§58), writes to `tournament_players`.
 - [ ] **3.4 Groups** — `tournament_groups` + `group_players` CRUD; admin UI to create groups
