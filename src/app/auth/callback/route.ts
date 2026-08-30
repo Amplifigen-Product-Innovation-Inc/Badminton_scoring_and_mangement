@@ -2,22 +2,26 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
 /**
- * Magic-link callback. Exchanges the auth code for a session, then routes the
- * user by role (§56 / role-based landing). Auth method (magic link vs
- * password) is an open question flagged in TASKS.md — magic link chosen as
- * the lowest-friction MVP default since players don't need to remember a
- * password to be a scorer for one tournament. Swap this route if the answer
- * is "password" instead.
+ * Auth link callback (§70 addendum — password auth). Used by:
+ *  - password-reset links (`resetPasswordForEmail`, redirects here with
+ *    `?next=/auth/update-password`)
+ *  - scorer invite links (Supabase invite-by-email, Phase 2) — same `next` pattern
+ *
+ * Exchanges the code for a session, then either honors `next` (set-password flows)
+ * or falls back to the normal role-based landing page.
  */
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
+  const next = searchParams.get("next");
 
   if (code) {
     const supabase = await createClient();
     const { error } = await supabase.auth.exchangeCodeForSession(code);
 
     if (!error) {
+      if (next) return NextResponse.redirect(`${origin}${next}`);
+
       const {
         data: { user },
       } = await supabase.auth.getUser();

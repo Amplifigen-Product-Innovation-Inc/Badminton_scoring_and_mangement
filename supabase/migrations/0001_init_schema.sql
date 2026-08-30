@@ -117,6 +117,14 @@ create table tournaments (
   description text,
   status tournament_status not null default 'DRAFT',
   created_by uuid references profiles (id) on delete set null,
+  -- Scoring config — §70 addendum. Deuce/cap rules are configurable per tournament;
+  -- these are the defaults every game in this tournament plays to unless a future
+  -- admin setting overrides them here. target_score = points needed to win outright;
+  -- win_by = required lead once at/above target; max_score = hard cap (first to
+  -- max_score always wins, regardless of lead — e.g. 30-29).
+  target_score smallint not null default 21 check (target_score > 0),
+  win_by smallint not null default 2 check (win_by >= 1),
+  max_score smallint not null default 30 check (max_score >= target_score),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

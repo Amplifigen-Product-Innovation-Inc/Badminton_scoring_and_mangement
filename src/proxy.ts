@@ -34,9 +34,13 @@ export async function proxy(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
+  // /auth/update-password is deliberately excluded: a user lands there already
+  // authenticated (via a password-reset/invite link exchanged in /auth/callback)
+  // specifically to change their password, so it must not bounce them away.
   const isAuthRoute =
     request.nextUrl.pathname.startsWith("/login") ||
-    request.nextUrl.pathname.startsWith("/auth");
+    (request.nextUrl.pathname.startsWith("/auth") &&
+      !request.nextUrl.pathname.startsWith("/auth/update-password"));
   const isProtectedRoute =
     request.nextUrl.pathname.startsWith("/admin") ||
     request.nextUrl.pathname.startsWith("/scorer");

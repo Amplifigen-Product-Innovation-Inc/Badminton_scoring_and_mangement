@@ -1,21 +1,58 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
+/**
+ * Password-based login (§70 addendum). Admin accounts are provisioned directly;
+ * scorer accounts are provisioned by admin invite (Supabase invite-by-email —
+ * see TASKS.md Phase 2), so there is no public sign-up form here on purpose.
+ */
 export default function LoginPage() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
-  const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [password, setPassword] = useState("");
+  const [mode, setMode] = useState<"password" | "forgot">("password");
+  const [status, setStatus] = useState<"idle" | "loading" | "sent" | "error">("idle");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSignIn(e: React.FormEvent) {
     e.preventDefault();
-    setStatus("sending");
+    setStatus("loading");
+    setErrorMessage(null);
     const supabase = createClient();
-    const { error } = await supabase.auth.signInWithOtp({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email: email.trim().toLowerCase(),
-      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+      password,
+    });
+
+    if (error || !data.user) {
+      setStatus("error");
+      setErrorMessage("Incorrect email or password.");
+      return;
+    }
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("auth_user_id", data.user.id)
+      .maybeSingle();
+
+    router.push(profile?.role === "ADMIN" ? "/admin" : "/scorer");
+    router.refresh();
+  }
+
+  async function handleForgotPassword(e: React.FormEvent) {
+    e.preventDefault();
+    setStatus("loading");
+    setErrorMessage(null);
+    const supabase = createClient();
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
+      redirectTo: `${window.location.origin}/auth/callback?next=/auth/update-password`,
     });
     setStatus(error ? "error" : "sent");
+    if (error) setErrorMessage("Something went wrong. Try again.");
   }
 
   return (
@@ -23,15 +60,20 @@ export default function LoginPage() {
       <div className="w-full max-w-sm rounded-2xl border border-neutral-200 bg-white p-8 shadow-sm">
         <h1 className="text-xl font-semibold text-neutral-900">Sign in</h1>
         <p className="mt-1 text-sm text-neutral-500">
-          Enter your email — we&apos;ll send you a sign-in link.
+          {mode === "password"
+            ? "Enter your email and password."
+            : "We'll email you a link to reset your password."}
         </p>
 
-        {status === "sent" ? (
+        {mode === "forgot" && status === "sent" ? (
           <p className="mt-6 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-700">
-            Check your inbox for a sign-in link.
+            Check your inbox for a password reset link.
           </p>
         ) : (
-          <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+          <form
+            onSubmit={mode === "password" ? handleSignIn : handleForgotPassword}
+            className="mt-6 space-y-4"
+          >
             <input
               type="email"
               required
@@ -40,18 +82,44 @@ export default function LoginPage() {
               onChange={(e) => setEmail(e.target.value)}
               className="w-full rounded-lg border border-neutral-300 px-4 py-3 text-base outline-none focus:border-neutral-900"
             />
+            {mode === "password" && (
+              <input
+                type="password"
+                required
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full rounded-lg border border-neutral-300 px-4 py-3 text-base outline-none focus:border-neutral-900"
+              />
+            )}
             <button
               type="submit"
-              disabled={status === "sending"}
+              disabled={status === "loading"}
               className="w-full rounded-lg bg-neutral-900 px-4 py-3 text-base font-medium text-white disabled:opacity-50"
             >
-              {status === "sending" ? "Sending…" : "Send sign-in link"}
+              {status === "loading"
+                ? "Please wait…"
+                : mode === "password"
+                  ? "Sign in"
+                  : "Send reset link"}
             </button>
-            {status === "error" && (
-              <p className="text-sm text-red-600">Something went wrong. Try again.</p>
+            {status === "error" && errorMessage && (
+              <p className="text-sm text-red-600">{errorMessage}</p>
             )}
           </form>
         )}
+
+        <button
+          type="button"
+          onClick={() => {
+            setMode(mode === "password" ? "forgot" : "password");
+            setStatus("idle");
+            setErrorMessage(null);
+          }}
+          className="mt-4 text-sm text-neutral-500 underline underline-offset-2"
+        >
+          {mode === "password" ? "Forgot your password?" : "Back to sign in"}
+        </button>
       </div>
     </main>
   );

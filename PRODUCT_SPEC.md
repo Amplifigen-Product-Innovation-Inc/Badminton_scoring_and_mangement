@@ -984,3 +984,96 @@ platform. The MVP should prove that we can accurately collect rally-level data, 
 individual performance, categorize players, run tournament group stages, qualify the top two
 players, create temporary teams, run cross-category matches, award tournament points, and
 preserve the complete history. Everything else should be built on top of this foundation later.
+
+---
+
+## 70. ADDENDUM — SCORING RULES, PERFORMANCE AGGREGATION & TESTING
+
+> Resolves the open questions raised against §29 (game completion), §14 (tie-breaking), and
+> §66 (testing framework). This addendum is authoritative wherever it's more specific than the
+> body of the spec above — it does not change any other rule.
+
+### SCORING RULES
+
+All games use rally scoring.
+
+Default game configuration (configurable per tournament, defaults below):
+
+- Target score: 21
+- Win-by: 2
+- Maximum score: 30
+
+Rules:
+
+- A team must reach at least 21 points and lead by 2 to win.
+- At 20–20, play continues until a 2-point lead occurs.
+- At 29–29, the next rally wins.
+- Maximum possible score is 30–29.
+
+Examples: 21–18, 22–20, 25–23, 30–29, 30–28 are all valid wins.
+
+For best-of-3 matches, the first team to win 2 games wins the match.
+
+### INDIVIDUAL PERFORMANCE AGGREGATION
+
+Per-match (unchanged from §30):
+
+```
+normalized_performance = (winners - drops) / (winners + drops)
+```
+
+SPLIT events are excluded.
+
+For **group-stage tie-breaking**, do NOT average per-match normalized performance — that would
+give a player with 2 rallies the same weight as one with 40. Instead, aggregate the underlying
+rally events across all **completed group-stage matches only**:
+
+```
+total_winners = SUM(all group-stage winners)
+total_drops   = SUM(all group-stage drops)
+
+group_normalized_performance = (total_winners - total_drops) / (total_winners + total_drops)
+```
+
+If `total_winners + total_drops = 0`, performance is unavailable and must NOT be used as a
+tie-break (skip to the next tie-break rule for that comparison).
+
+Convert to 0–100 the same way as §31:
+
+```
+performance_score = (group_normalized_performance + 1) * 50
+```
+
+### GROUP STAGE RANKING
+
+Primary: Tournament Points = Matches Won × 2 (§13, unchanged).
+
+Tie-breakers, in order (supersedes §14's tie-break list):
+
+1. Head-to-head result
+2. Aggregate group-stage individual performance score (as defined above)
+3. Game differential (games won − games lost, group-stage matches only)
+4. Admin manual override
+
+Only **completed group-stage matches** count toward group standings and group-stage
+tie-breaks. Cross-category and final-stage matches must NOT retroactively affect group-stage
+qualification.
+
+### TESTING
+
+**Vitest** (unit/integration) for: game scoring, deuce logic, 30-point cap, rally event
+calculations, winner/drop/split calculations, normalized performance, aggregated tournament
+performance, player rating, tournament points, standings, tie-breaks, qualification.
+
+**Playwright** (end-to-end) for: authentication, admin workflows, tournament creation, player
+management, group creation, player assignment, court/scorer assignment, scorer workflow, rally
+recording, undo, game completion, match completion, tournament standings, top-2 qualification,
+temporary team creation, cross-category matches, historical tournament access.
+
+Do not use Jest or Cypress unless there is a specific technical reason to deviate.
+
+### AUTH METHOD
+
+Password-based authentication (Supabase Auth email+password), not magic link. Admin accounts
+provisioned directly; scorer accounts provisioned by admin invite (Supabase invite-by-email,
+recipient sets their own password via the invite link).

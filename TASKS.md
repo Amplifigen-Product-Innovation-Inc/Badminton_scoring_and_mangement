@@ -19,9 +19,12 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
       indexes, `updated_at` triggers. No RLS yet, no functions yet — just structure.
 - [ ] **0.4 Seed script skeleton** — empty seed file wired to `supabase db seed`, filled in
       Phase 6. *(Not started — needs a linked Supabase project to `supabase db seed` against.)*
-- [x] **0.5 Auth scaffold** — Supabase Auth, `profiles` table linkage, login page, role-based
-      redirect (ADMIN → `/admin`, SCORER → `/scorer`). Defaulted to **magic link** (open
-      question #1 below) — swap `/login` + `/auth/callback` if password auth is wanted instead.
+- [x] **0.5 Auth scaffold** — Supabase Auth (password-based, §70), `profiles` table linkage,
+      login page, forgot/reset-password flow, role-based redirect (ADMIN → `/admin`, SCORER →
+      `/scorer`).
+- [x] **0.6 Testing tooling** — Vitest + Playwright installed and configured per §70 (no Jest,
+      no Cypress). Playwright browsers need `npx playwright install` run once locally/in CI —
+      not run automatically by this scaffold.
 
 ## Phase 1 — RLS & Access Control
 
@@ -62,8 +65,8 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
 - [ ] **4.1 Rally recording** — `rallies` insert with idempotent client-generated IDs (§51),
       WINNER/DROP/SPLIT event types, attribution rules (§25–27).
 - [ ] **4.2 Badminton score update** — Postgres function: rally event → game score increment
-      (§28), game completion detection (21/decider rules — confirm exact badminton rules with
-      user if not just "first to 21"), Bo1/Bo3 match completion (§29).
+      (§28), game completion via §70 deuce/cap rules (target 21 / win-by 2 / cap 30, per-
+      tournament configurable), Bo1/Bo3 match completion = first to 2 games (§29).
 - [ ] **4.3 Undo** — reverse latest rally: delete/void rally row, recompute game score,
       recompute in-flight performance. Scoped to scorer's own recent rally only.
 - [ ] **4.4 Individual performance calc** — Postgres function implementing §30–32 exactly
@@ -94,8 +97,11 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
 
 ## Phase 6 — Group Standings, Qualification, Temporary Teams
 
-- [ ] **6.1 Group standings view** — tournament_points DESC + tie-break chain (§14): H2H →
-      match differential → normalized performance → admin override field.
+- [ ] **6.1 Group standings view** — tournament_points DESC + tie-break chain (§70, supersedes
+      §14): H2H → aggregate group-stage normalized performance (summed winners/drops across
+      completed group-stage matches only, not averaged per-match; unavailable if
+      winners+drops=0, skip to next rule) → game differential → admin override. Scoped strictly
+      to completed group-stage matches — cross-category/final matches must not leak in.
 - [ ] **6.2 Top-2 qualification** — computed + **persisted** (§15) qualification record per
       group, not recalculated-and-discarded on every render.
 - [ ] **6.3 Temporary team creation** — admin UI "Create Qualified Team" (§44), writes `teams` +
@@ -127,9 +133,9 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
 - [ ] **8.1 Seed data** — §65: 30 players, 3 tournaments, 6 courts, multiple groups/matches,
       rotating partners, mix of completed/live matches, WINNER/DROP/SPLIT events, historical
       participation across tournaments for at least a few players.
-- [ ] **8.2 Automated tests** — §66 checklist as actual test suite (unit tests for scoring math,
-      integration tests for RLS, e2e for the scorer flow). Framework choice: confirm
-      Vitest/Playwright with user.
+- [ ] **8.2 Automated tests** — §66 checklist as actual test suite: Vitest for scoring math/
+      deuce-cap logic/rating/standings/tie-breaks/qualification, Playwright for the full admin
+      + scorer e2e flow (§70). RLS gets its own SQL-level suite in 1.2, not Vitest/Playwright.
 - [ ] **8.3 End-to-end acceptance run** — manually or via Playwright, walk the full §67 flow
       (admin setup → scorer live scoring → system calc → qualification → cross-category →
       historical access) and record results.
@@ -142,15 +148,21 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
 
 ---
 
-## Open questions to resolve before/during Phase 0–1 (flagged, not blocking scaffold)
+## Resolved decisions (see PRODUCT_SPEC.md §70 for the authoritative text)
 
-1. Auth method for scorers/admins: magic link vs password vs invite-only? Spec doesn't say.
-2. Exact badminton scoring rules to encode (win by 2, cap at 30, deuce at 20-20) — spec says
-   "Best of 1 / Best of 3" and shows 21-point examples but doesn't state deuce/cap rules.
-3. Tie-break §14 point 3 ("individual normalized performance") — normalized performance is
-   per-match; need to define how it aggregates for a tie-break across a group's matches.
-4. Testing framework preference (Vitest/Jest, Playwright/Cypress).
-5. Single admin org, or later multi-tenant? (assume single-tenant for MVP per spec silence)
+1. **Auth:** password-based (Supabase Auth email+password). Admin accounts provisioned
+   directly; scorer accounts via admin invite-by-email (recipient sets their own password).
+2. **Scoring rules:** rally scoring, target 21 / win-by 2 / cap 30, configurable per tournament
+   (defaults as above). Best-of-3 = first to 2 games.
+3. **Group-stage tie-break chain:** Tournament Points → head-to-head → aggregate group-stage
+   normalized performance (summed winners/drops across completed group-stage matches only,
+   never averaged per-match) → game differential → admin override. Cross-category/final
+   matches never affect group-stage standings.
+4. **Testing:** Vitest (unit/integration — scoring math, rating, standings, tie-breaks,
+   qualification) + Playwright (e2e — full admin/scorer workflows). No Jest, no Cypress.
+5. Single-tenant for MVP (unchanged assumption, still no spec input needed).
 
-These don't block Phase 0 scaffolding but do block 3.6 (match/game format) and 8.2 — will ask
-before those phases start.
+## Remaining open question
+
+1. Multi-tenant is still just an assumption, not a confirmed decision — revisit only if it
+   comes up; doesn't block any current phase.
