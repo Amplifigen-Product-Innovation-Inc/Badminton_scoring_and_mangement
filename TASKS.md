@@ -156,8 +156,44 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
       court inline, changed a court's status to LIVE, removed one court from the tournament
       (confirmed it stayed in the global registry, not deleted), no console errors. Build/
       lint/vitest all pass. Test fixtures cleaned up afterward.
-- [ ] **3.6 Match creation** — create matches within a group/stage, assign court, format
-      (singles/doubles, Bo1/Bo3), scorer assignment (prefer court-level per §22).
+- [x] **3.6 Match creation** — `src/lib/validation/match.ts` (matchType/bestOf enums, team-size
+      cross-validation against matchType via superRefine, rejects a player on both teams),
+      `src/app/admin/tournaments/match-actions.ts` (createMatch/cancelMatch/deleteMatch),
+      `MatchesManager` embedded in the tournament detail page — pick a stage (+ optional group,
+      which also narrows the player picker to that group's roster), format, best-of, court,
+      scorer, and both teams' players via checkboxes.
+      **Scorer assignment decision:** §22 states MVP should prefer court-level scorer
+      assignment, but the schema only has `scorer_id` on `matches`, and `tournament_courts`
+      itself is currently admin-only in RLS (no scorer visibility at all) — true court-level
+      assignment needs a migration (new column) plus a new RLS policy on top of the already-
+      verified Phase 1 security model. Per user direction, deferred: this phase uses
+      match-level `scorer_id` only. Revisit court-level assignment as a follow-up once it's
+      worth reopening the RLS suite for.
+      **createMatch isn't atomic** — supabase-js issues the matches/teams/match_participants
+      inserts as separate statements (no transaction). On a teams/participants insert failure,
+      the code deletes the just-created match as compensation rather than leaving a teamless
+      orphan, but this is best-effort, not a real rollback. A proper atomic version belongs in
+      a Postgres RPC alongside the Phase 4 scoring-engine functions.
+      **Found and fixed two real bugs while verifying:**
+      1. `MatchesManager`'s `stageId` was a `useState(stages[0]?.id ?? "")` one-time
+         initializer — since the component is already mounted (rendering the "add a stage
+         first" placeholder) before any stage exists, that initial value stayed `""` forever
+         even after a stage was added and `stages` changed via `router.refresh()`. The
+         `<select>` visually showed the first stage anyway (a controlled `<select>` with a
+         `value` that matches no `<option>` falls back to displaying the first one without
+         firing `onChange`), masking the bug until submit failed with "Invalid UUID". Fixed by
+         deriving the effective stageId at render time (falling back to `stages[0]` only when
+         the raw selection isn't in the current list) instead of storing/syncing it as state.
+      2. The matches list's scorer label read only `profiles.players.name`, with no fallback
+         for a scorer profile with no linked player (`profiles.player_id` is nullable by
+         design) — a match with a real `scorer_id` set rendered as "No scorer assigned". Fixed
+         to match the same `Scorer <id>` fallback the scorer-picker dropdown already used.
+      **Verified end-to-end** 2026-08-30: live-browser Playwright — created a SINGLES match
+      (with court + scorer assigned) and a DOUBLES match, confirmed correct team/player display
+      and the scorer-label fallback in the UI, confirmed a mismatched-team-size submission is
+      rejected with a clear per-field error and creates nothing, cancelled one match and
+      deleted the other, confirmed both outcomes directly in the DB. No console errors. Build/
+      lint/vitest all pass. Test fixtures cleaned up afterward.
 
 ## Phase 4 — Scoring Engine (pure logic, DB functions)
 
