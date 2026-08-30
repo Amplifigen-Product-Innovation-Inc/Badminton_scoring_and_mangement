@@ -28,12 +28,24 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
 
 ## Phase 1 — RLS & Access Control
 
-- [ ] **1.1 RLS policies (migration 002)** — implement spec §50 exactly: admin full CRUD;
-      scorer scoped to assigned match/court/players/rallies; no scorer access to
-      players/tournaments/ratings/categories tables.
-- [ ] **1.2 RLS test suite** — pgTAP or scripted SQL tests proving: scorer cannot read/write
-      other scorers' matches; scorer cannot touch `player_ratings`, `rating_categories`,
-      `tournaments`; admin can do everything. This must pass before any UI work trusts RLS.
+- [x] **1.1 RLS policies (migration 002)** — `supabase/migrations/0002_rls_policies.sql`.
+      Admin: blanket `FOR ALL` on every table. Scorer: SELECT only, every policy chained back
+      to `matches.scorer_id = auth_profile_id()`; zero access to players/tournaments/ratings/
+      categories/tournament-structure tables beyond that. Scorer's only direct write is
+      `INSERT` on `rallies` (self-attributed, own LIVE match only) — match state transitions
+      and rally undo are deliberately NOT raw scorer UPDATE/DELETE grants; they're SECURITY
+      DEFINER RPCs to be added in Phase 4 (`start_match`, `complete_match`,
+      `undo_last_rally`) so the authorization + validity-of-transition logic lives in one
+      place. See the design-decision comment at the top of the migration file.
+- [x] **1.2 RLS test suite** — `supabase/tests/database/0001_rls.test.sql`, pgTAP, 25
+      assertions: scorer A/B isolation (matches, tournaments, courts, teams, participants,
+      players, games all scoped correctly and symmetrically), zero scorer visibility into
+      ratings/categories/stats tables, rally insert succeeds only for own+LIVE+self-attributed,
+      fails for other-attributed and for another scorer's match, players/tournaments/ratings/
+      categories/groups all reject scorer writes, admin passes every check.
+      **⚠ Written but not executed** — this sandbox has no Docker/Postgres to run it against.
+      Must be run (`supabase start && supabase test db`) and confirmed green before Phase 2
+      UI work leans on these policies being correct.
 
 ## Phase 2 — Player Management (Admin)
 
