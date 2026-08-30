@@ -530,6 +530,8 @@ export type Database = {
           game_id: string
           id: string
           player_id: string | null
+          sequence_number: number
+          winning_team_id: string
         }
         Insert: {
           created_at?: string
@@ -538,6 +540,8 @@ export type Database = {
           game_id: string
           id?: string
           player_id?: string | null
+          sequence_number?: never
+          winning_team_id: string
         }
         Update: {
           created_at?: string
@@ -546,6 +550,8 @@ export type Database = {
           game_id?: string
           id?: string
           player_id?: string | null
+          sequence_number?: never
+          winning_team_id?: string
         }
         Relationships: [
           {
@@ -574,6 +580,13 @@ export type Database = {
             columns: ["player_id"]
             isOneToOne: false
             referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rallies_winning_team_id_fkey"
+            columns: ["winning_team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
             referencedColumns: ["id"]
           },
         ]
@@ -945,6 +958,8 @@ export type Database = {
       }
       is_admin: { Args: never; Returns: boolean }
       is_scorer: { Args: never; Returns: boolean }
+      recompute_game_score: { Args: { p_game_id: string }; Returns: undefined }
+      undo_last_rally: { Args: { p_game_id: string }; Returns: undefined }
     }
     Enums: {
       game_status: "IN_PROGRESS" | "COMPLETED"

@@ -197,13 +197,63 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
 
 ## Phase 4 — Scoring Engine (pure logic, DB functions)
 
-- [ ] **4.1 Rally recording** — `rallies` insert with idempotent client-generated IDs (§51),
-      WINNER/DROP/SPLIT event types, attribution rules (§25–27).
-- [ ] **4.2 Badminton score update** — Postgres function: rally event → game score increment
-      (§28), game completion via §70 deuce/cap rules (target 21 / win-by 2 / cap 30, per-
-      tournament configurable), Bo1/Bo3 match completion = first to 2 games (§29).
-- [ ] **4.3 Undo** — reverse latest rally: delete/void rally row, recompute game score,
-      recompute in-flight performance. Scoped to scorer's own recent rally only.
+- [x] **4.1 Rally recording** — `supabase/migrations/0004_scoring_functions.sql`. Attribution
+      (§25–27) enforced by the `validate_rally()` trigger, not just application code: WINNER
+      must credit the scoring player's own team, DROP must credit the opponent, SPLIT (no
+      player) credits whichever team the scorer records directly. Idempotent client-generated
+      IDs (§51): `rallies.id` is a normal `uuid primary key` a client can supply explicitly: a
+      retried insert with the same id hits the PK unique-violation, which the client should
+      treat as "already recorded" — no schema change needed, this is a Phase 5 client-side
+      concern (documented for when the scorer UI is built).
+      **Schema decision (user-approved):** added `rallies.winning_team_id` (always required,
+      independent of player attribution) to make SPLIT scoring representable at all — see the
+      design note at the top of the migration for the full reasoning. Also added
+      `rallies.sequence_number` (a real identity column) because `created_at` alone can't
+      reliably order "the last rally": `now()` is transaction-start-time in Postgres, not
+      per-statement, so any bulk/multi-row insert shares one timestamp with no defined
+      tie-break — needed for 4.3's undo below.
+- [x] **4.2 Badminton score update** — `recompute_game_score(game_id)`, same migration. Never
+      hand-increments — always recomputes `games.team_1_score/team_2_score/winner_team_id/
+      status` fresh from that game's raw rallies (§46/§47: never trust a stored total),
+      applying §70's deuce/cap rules read from the parent tournament (configurable
+      target/win-by/max, not hard-coded). Runs automatically via an AFTER INSERT/UPDATE/DELETE
+      trigger on `rallies`, and is reused as-is by undo (4.3) and, later, by 7.5's
+      "Recalculate". Bo1/Bo3 *match* completion (§29 steps 1–9) is explicitly NOT here — that's
+      4.7, a separate, much larger orchestration.
+- [x] **4.3 Undo** — `undo_last_rally(game_id)` SECURITY DEFINER RPC. Finds the rally with the
+      highest `sequence_number` for that game, authorizes (admin: anything; scorer: only their
+      own currently-LIVE assigned match, only a rally they themselves created), deletes it —
+      the AFTER DELETE trigger recomputes the game automatically, so "undo" is just "delete +
+      let 4.2 do its job," not separate reversal logic.
+      **Found and fixed three real bugs while verifying** (pgTAP,
+      `supabase/tests/database/0002_scoring_engine.test.sql`, 28 assertions, run the same way
+      as 0001 — `supabase db query --linked -f`, no Docker in this sandbox):
+      1. `validate_rally()` and `recompute_game_score()` were plain (SECURITY INVOKER)
+         functions doing cross-table SELECTs — under a scorer's own restricted RLS visibility,
+         a lookup into another scorer's match/game returns nothing, so the trigger raised a
+         false "game not found" instead of correctly falling through to RLS's own 42501
+         rejection. Fixed by making both SECURITY DEFINER (matching the auth_profile_id()/
+         is_admin() pattern in 0002), same as data-integrity checks needing to see the real
+         data regardless of caller — authorization stays RLS's job.
+      2. `trigger_recompute_game_score()` (the AFTER-trigger wrapper) is itself SECURITY
+         INVOKER, and its *nested* call to `recompute_game_score()` is checked against the
+         current caller's own EXECUTE grant even though firing the trigger itself needs no such
+         grant — so revoking direct-RPC EXECUTE on `recompute_game_score()` (see bug 3) broke
+         every rally insert with "permission denied for function recompute_game_score" until
+         the wrapper was also made SECURITY DEFINER.
+      3. `validate_rally()`/`recompute_game_score()` are internal, trigger-only helpers with no
+         business being directly callable — but `supabase db advisors --linked` caught that
+         Supabase's default privileges grant `EXECUTE` directly to `anon`/`authenticated` on
+         every new function (separate from the `PUBLIC` grant), so both were reachable via
+         `/rest/v1/rpc/<name>` including by unauthenticated callers. Fixed by revoking from
+         `public, anon, authenticated` explicitly (revoking from `public` alone, as the
+         migration first tried, does nothing to those two direct grants).
+      **Verified:** 25/25 (0001) + 28/28 (0002) green; `npm run build`/`lint`/`vitest` pass
+      against regenerated types; `supabase db advisors --linked` shows no new findings beyond
+      the pre-existing, already-logged ones (60 "multiple permissive policies" perf notices,
+      one unrelated pre-existing `search_path` warning on `set_updated_at`) plus
+      `undo_last_rally` itself being `authenticated`-callable, which is intentional (scorers/
+      admins call it directly).
 - [ ] **4.4 Individual performance calc** — Postgres function implementing §30–32 exactly
       (normalized performance, 80/20 blend with match result). Unit-testable via SQL fixtures.
 - [ ] **4.5 Rating update function** — §33 (80/20 rolling), clamp 0–100, write
