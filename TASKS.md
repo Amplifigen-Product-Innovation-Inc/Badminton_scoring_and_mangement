@@ -106,8 +106,19 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
       **Verified end-to-end** 2026-08-30: same Playwright session as 3.1 — added two stages,
       clicked "Move up" on the second, confirmed both the on-screen reordering and the
       underlying `stage_order` values in the DB swapped correctly, no console errors.
-- [ ] **3.3 Add players to tournament** — search-and-select existing players + inline "add new
-      player" (§58), writes to `tournament_players`.
+- [x] **3.3 Add players to tournament** — `src/app/admin/tournaments/player-actions.ts`
+      (searchAvailablePlayers excludes players already on the roster; addPlayersToTournament
+      for the checkbox "Add Selected" flow; addNewPlayerAndAddToTournament reuses the same
+      validate/normalize/duplicate-check path as the main Players page, §9, then links to this
+      tournament; removePlayerFromTournament deletes the roster row outright — no match/group
+      data can reference a player yet at this phase, so there's nothing to preserve; revisit to
+      a WITHDRAWN status flip once matches exist, TASKS.md 3.6+). `TournamentPlayersManager`
+      embedded in the tournament detail page (debounced search, checkbox multi-select, inline
+      "+ Add New Player").
+      **Verified end-to-end** 2026-08-30: same live-browser Playwright pattern as 3.1/3.2 —
+      searched and added an existing global player, added a brand-new player through the
+      inline form, removed one, confirmed roster counts/rows in both the UI and the DB at each
+      step, no console errors. Test fixtures cleaned up afterward.
 - [ ] **3.4 Groups** — `tournament_groups` + `group_players` CRUD; admin UI to create groups
       and assign players within a stage.
 - [ ] **3.5 Courts** — global `courts` table CRUD + per-tournament `tournament_courts` with

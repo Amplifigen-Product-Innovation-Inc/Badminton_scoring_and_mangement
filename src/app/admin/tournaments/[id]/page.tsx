@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { TournamentEditForm } from "@/components/admin/tournament-edit-form";
 import { StagesManager } from "@/components/admin/stages-manager";
+import { TournamentPlayersManager } from "@/components/admin/tournament-players-manager";
 
 export default async function TournamentDetailPage({
   params,
@@ -25,6 +26,20 @@ export default async function TournamentDetailPage({
     .eq("tournament_id", id)
     .order("stage_order");
 
+  const { data: rosterRows } = await supabase
+    .from("tournament_players")
+    .select("status, players(id, name, email)")
+    .eq("tournament_id", id);
+
+  const roster = (rosterRows ?? [])
+    .filter((r) => r.players)
+    .map((r) => ({
+      id: r.players!.id,
+      name: r.players!.name,
+      email: r.players!.email,
+      status: r.status,
+    }));
+
   return (
     <main className="mx-auto max-w-2xl px-6 py-10">
       <Link href="/admin/tournaments" className="text-sm text-neutral-500 hover:text-neutral-900">
@@ -34,6 +49,7 @@ export default async function TournamentDetailPage({
 
       <div className="mt-6 space-y-6">
         <TournamentEditForm tournament={tournament} />
+        <TournamentPlayersManager tournamentId={id} roster={roster} />
         <StagesManager tournamentId={id} stages={stages ?? []} />
       </div>
     </main>
