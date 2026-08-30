@@ -254,17 +254,63 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
       one unrelated pre-existing `search_path` warning on `set_updated_at`) plus
       `undo_last_rally` itself being `authenticated`-callable, which is intentional (scorers/
       admins call it directly).
-- [ ] **4.4 Individual performance calc** — Postgres function implementing §30–32 exactly
-      (normalized performance, 80/20 blend with match result). Unit-testable via SQL fixtures.
-- [ ] **4.5 Rating update function** — §33 (80/20 rolling), clamp 0–100, write
-      `player_rating_history` row (§61) on every completed match — never overwrite without
-      history.
-- [ ] **4.6 Rating confidence + category** — §34 confidence buckets, §35 category lookup
-      against editable `rating_categories` thresholds.
-- [ ] **4.7 Match completion orchestration** — single Postgres function/RPC that on match
-      complete runs steps 1–9 of §29 atomically (one transaction): lock match, compute
-      performance, determine winner, award tournament points (win×2), update rating/category/
-      history, update tournament_player_stats, preserve raw rallies untouched.
+- [x] **4.4 Individual performance calc** — `calculate_player_match_performance(match_id,
+      player_id)`, `supabase/migrations/0005_match_completion.sql`. §30-31 exactly: normalized
+      performance from WINNER/DROP rallies across every game in the match (a Bo3 match's
+      performance is match-wide, not per-game), converted to the 0-100 scale. Returns NULL
+      when winners+drops=0 (§32's blend is 4.7's job, not this function's).
+- [x] **4.5 Rating update function** — `apply_player_rating_update(player_id,
+      match_performance, tournament_id, match_id)`, same migration. §33 (80/20 rolling, clamped
+      0-100), appends one `player_rating_history` row every call — never overwrites without a
+      trail (§61).
+- [x] **4.6 Rating confidence + category** — folded into `apply_player_rating_update` (same
+      function updates rating, confidence, and category together in one upsert — they're not
+      independent values, all three derive from the same new-rating calculation). §34 buckets
+      (0-2/3-5/6+ completed matches -> PROVISIONAL/EMERGING/ESTABLISHED) and §35 category
+      lookup against the editable `rating_categories` thresholds (never hard-coded).
+- [x] **4.7 Match completion orchestration** — `complete_match(match_id)`, same migration.
+      Runs §29 steps 1-9 as one PL/pgSQL function call, which — unlike application-level
+      multi-statement work elsewhere in this codebase (see the compensating-delete comment on
+      `createMatch` in `src/app/admin/tournaments/match-actions.ts`) — genuinely is one
+      transaction: lock (status/completed_at/winner_team_id), determine the winner via
+      `calculate_match_result` (Bo1/Bo3 = first to ceil(best_of/2) games, refuses to complete
+      an undecided match), then per participant: performance (4.4) -> blend with win/loss
+      (§32) -> rating/confidence/category (4.5-4.6) -> tournament_points/tournament_player_stats
+      (§13, §37) -> leaves `rallies` completely untouched (step 9). SECURITY DEFINER with its
+      own authorization (admin: any match; scorer: only their own assigned LIVE match), same
+      shape as `undo_last_rally`.
+      **Documented assumptions** (spec doesn't fully specify these; see the migration's file
+      header for the full reasoning, easy to revisit):
+      1. `tournament_player_stats.splits` (§37) can't be "splits caused by this player" the way
+         winners/drops can, since SPLIT rallies have no `player_id` at all (§27) — credited
+         instead as "SPLIT rallies in games this player took part in," shared across every
+         participant of a match.
+      2. A player with zero WINNER+DROP rallies in a whole match has an undefined normalized
+         performance (§30 divides by winners+drops), but §33 requires a rating update after
+         *every* completed match — falls back to a neutral performance score of 50 rather than
+         skipping the update.
+      3. `tournament_player_stats.tournament_rating` is read as "this player's current global
+         rating as of this tournament," not a second, tournament-scoped rating system (§36
+         keeps points and rating separate but doesn't describe two rating scales).
+      4. `tournament_player_stats.average_performance` averages the blended Match Performance
+         (§32, post win/loss), matching that section's naming, not the raw pre-blend
+         Individual Performance Score (§31).
+      **Found and fixed one real bug while verifying:** `calculate_match_result`'s
+      `winner_team_id` OUT parameter has the same name as the `games.winner_team_id` column it
+      queries against, and PL/pgSQL resolved the bare column reference to the OUT parameter
+      instead of the table column ("column reference is ambiguous"). Fixed by table-aliasing
+      the query (`games g`, `g.winner_team_id`).
+      **Verified end-to-end** 2026-08-30: 34 pgTAP assertions
+      (`supabase/tests/database/0003_match_completion.test.sql`, run via `supabase db query
+      --linked -f`, no Docker in this sandbox) covering a full Bo1 happy path with hand-checked
+      performance/rating/category/stats arithmetic, a second completed match proving
+      average_performance and rating roll forward (not reset) across a tournament, Bo3's
+      "first to 2 games" gating (including refusing an undecided match and a 1-1 tie), refusing
+      to re-complete an already-COMPLETED match, and scorer-vs-admin authorization. Reran
+      0001/0002's suites (25/25, 28/28) to confirm no regression. Build/lint/vitest pass against
+      regenerated types; `supabase db advisors --linked` clean beyond the same pre-existing
+      findings as 4.1-4.3, plus `complete_match` itself being `authenticated`-callable, which is
+      intentional.
 
 ## Phase 5 — Scorer UI (highest priority UX)
 

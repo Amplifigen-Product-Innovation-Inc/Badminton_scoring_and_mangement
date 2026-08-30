@@ -951,11 +951,33 @@ export type Database = {
       }
     }
     Functions: {
+      apply_player_rating_update: {
+        Args: {
+          p_match_id: string
+          p_match_performance: number
+          p_player_id: string
+          p_tournament_id: string
+        }
+        Returns: number
+      }
       auth_profile_id: { Args: never; Returns: string }
       auth_role: {
         Args: never
         Returns: Database["public"]["Enums"]["profile_role"]
       }
+      calculate_match_result: {
+        Args: { p_match_id: string }
+        Returns: {
+          team1_games_won: number
+          team2_games_won: number
+          winner_team_id: string
+        }[]
+      }
+      calculate_player_match_performance: {
+        Args: { p_match_id: string; p_player_id: string }
+        Returns: number
+      }
+      complete_match: { Args: { p_match_id: string }; Returns: undefined }
       is_admin: { Args: never; Returns: boolean }
       is_scorer: { Args: never; Returns: boolean }
       recompute_game_score: { Args: { p_game_id: string }; Returns: undefined }
