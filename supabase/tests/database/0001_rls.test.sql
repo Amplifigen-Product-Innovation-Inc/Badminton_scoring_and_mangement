@@ -1,14 +1,17 @@
 -- ============================================================================
 -- 0001_rls.test.sql — RLS test suite (TASKS.md 1.2 / spec §66 "Security").
 --
--- ⚠ UNEXECUTED IN THIS ENVIRONMENT: this sandbox has no Docker/local Postgres,
--- so this file has been written but never actually run. Run it before trusting
--- it — see run instructions at the bottom of this comment block. Treat it as
--- "ready to verify", not "verified", until someone runs it green.
---
 -- Run with the Supabase CLI (needs Docker):
 --   supabase start
 --   supabase test db
+--
+-- Verified green (25/25) 2026-08-30 against the linked remote project via
+-- `supabase db query --linked -f`, since this sandbox has no Docker. Four
+-- assertions were rewritten in that pass (see the players/tournaments/
+-- rating_categories UPDATE/DELETE block below) — they originally expected
+-- `throws_ok(..., '42501', ...)`, but a blocked scorer UPDATE/DELETE just
+-- matches zero rows under RLS rather than raising an exception; matching
+-- Postgres behavior confirmed the data was untouched either way.
 --
 -- Proves, using pgTAP, the core claims from spec §50/§68.13:
 --   - A scorer can see and act on ONLY their own assigned match — its
@@ -62,6 +65,9 @@ insert into tournament_stages (id, tournament_id, name, stage_type, stage_order,
 insert into courts (id, name) values
   ('00000000-0000-0000-0000-00000000f001', 'RLS Test Court 1'),
   ('00000000-0000-0000-0000-00000000f002', 'RLS Test Court 2');
+
+insert into rating_categories (id, name, min_rating, max_rating, display_order) values
+  ('00000000-0000-0000-0000-0000000ca701', 'RLS Test Category', 40, 60, 99);
 
 -- Match A: assigned to scorer A, players 1 & 2 (singles).
 insert into matches (id, tournament_id, stage_id, court_id, match_number, match_type, status, scorer_id)
@@ -207,25 +213,33 @@ select throws_ok(
 );
 
 -- Scorer cannot modify players (§3, §50 explicit rule).
-select throws_ok(
-  $$ update players set name = 'Hacked' where id = '00000000-0000-0000-0000-00000000c001' $$,
-  '42501',
-  null,
+--
+-- Note: players/tournaments/rating_categories carry a blanket
+-- `GRANT UPDATE/DELETE ... TO authenticated` (RLS does the real restricting
+-- per-role), so a scorer's UPDATE/DELETE against a row their USING clause
+-- filters out doesn't raise 42501 — it just matches zero rows, same as any
+-- Postgres RLS setup without an explicit REVOKE. So these assert "unchanged
+-- afterward", not "throws", which is what the admin FOR ALL / no-scorer-
+-- policy split actually guarantees.
+update players set name = 'Hacked' where id = '00000000-0000-0000-0000-00000000c001';
+select is(
+  (select name from players where id = '00000000-0000-0000-0000-00000000c001'),
+  'Player One',
   'scorer A cannot UPDATE a player'
 );
 
-select throws_ok(
-  $$ delete from players where id = '00000000-0000-0000-0000-00000000c001' $$,
-  '42501',
-  null,
+delete from players where id = '00000000-0000-0000-0000-00000000c001';
+select is(
+  (select count(*) from players where id = '00000000-0000-0000-0000-00000000c001'),
+  1::bigint,
   'scorer A cannot DELETE a player'
 );
 
 -- Scorer cannot modify tournaments.
-select throws_ok(
-  $$ update tournaments set status = 'CANCELLED' where id = '00000000-0000-0000-0000-00000000d001' $$,
-  '42501',
-  null,
+update tournaments set status = 'CANCELLED' where id = '00000000-0000-0000-0000-00000000d001';
+select is(
+  (select status from tournaments where id = '00000000-0000-0000-0000-00000000d001')::text,
+  'IN_PROGRESS',
   'scorer A cannot UPDATE a tournament'
 );
 
@@ -237,13 +251,19 @@ select throws_ok(
   'scorer A cannot write to player_ratings'
 );
 
--- Scorer cannot change category thresholds.
-select throws_ok(
-  $$ update rating_categories set min_rating = 0 $$,
-  '42501',
-  null,
+-- Scorer cannot change category thresholds. Scorer has zero SELECT
+-- visibility into rating_categories (test 9 above), so the verification
+-- read has to bypass RLS — reset to the migration-owning role, which isn't
+-- subject to these policies at all, rather than relying on the scorer's own
+-- (nonexistent) read access.
+update rating_categories set min_rating = 0 where id = '00000000-0000-0000-0000-0000000ca701';
+reset role;
+select is(
+  (select min_rating from rating_categories where id = '00000000-0000-0000-0000-0000000ca701'),
+  40::numeric,
   'scorer A cannot UPDATE rating_categories'
 );
+set local role authenticated;
 
 -- Scorer cannot create tournament structure.
 select throws_ok(

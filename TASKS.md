@@ -43,9 +43,13 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
       ratings/categories/stats tables, rally insert succeeds only for own+LIVE+self-attributed,
       fails for other-attributed and for another scorer's match, players/tournaments/ratings/
       categories/groups all reject scorer writes, admin passes every check.
-      **⚠ Written but not executed** — this sandbox has no Docker/Postgres to run it against.
-      Must be run (`supabase start && supabase test db`) and confirmed green before Phase 2
-      UI work leans on these policies being correct.
+      **✅ Verified green (25/25)** 2026-08-30 against the linked live project
+      (`udsbnuavvhzblbpedjiz`) via `supabase db query --linked -f` (no Docker in this
+      sandbox, so `supabase test db` itself is untried — same SQL, different runner). Four
+      assertions were corrected in the process: they expected a blocked scorer UPDATE/DELETE
+      to throw `42501`, but Postgres RLS just matches zero rows in that case (no REVOKE at
+      the grant level) — confirmed the underlying data was untouched either way, so this was
+      a test-expectation bug, not a policy gap.
 
 ## Phase 2 — Player Management (Admin)
 
@@ -68,19 +72,38 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
       pulling in RHF here would be exactly the "unnecessary library" §2 warns against. Revisit
       if a later form (tournament creation, match editing) is complex enough to justify it.
 
-  **Not yet run against a live database** — every phase above (schema, RLS, this view, this
-  UI) has been written and passes local build/lint, but nothing has executed against a real
-  Postgres/Supabase instance in this environment. Recommend creating a Supabase project (or
-  `supabase start` locally, if Docker is available) and running the migrations + RLS test
-  suite before trusting any of it further, and before generating real `database.types.ts` to
-  replace the current `any` placeholder — the placeholder is currently masking any
-  table/column typos.
+  **✅ Run against a live database** 2026-08-30: linked to Supabase project
+  `udsbnuavvhzblbpedjiz`, pushed migrations 0001–0003 clean (`supabase db push`), ran the RLS
+  suite green (see 1.2), and regenerated `src/lib/types/database.types.ts` from the real
+  schema (`supabase gen types typescript --linked`) — no more `any` placeholder. `npm run
+  build`, `npm run lint`, and `npx vitest run` all pass against the real types.
+  `supabase db advisors --linked` reports no ERROR-level findings; 72 WARN-level notices (60
+  are "multiple permissive policies" perf notices, the rest are `search_path`/`SECURITY
+  DEFINER` hardening items) — deferred to 9.2 (final RLS/security pass), not a blocker here.
 
 ## Phase 3 — Tournament & Stage Structure (Admin)
 
-- [ ] **3.1 Tournament CRUD** — create/edit/cancel, status enum, fields from §10.
-- [ ] **3.2 Tournament stage model** — `tournament_stages` CRUD, flexible stage_type
-      (GROUP/CROSS_CATEGORY/FINAL), ordering.
+- [x] **3.1 Tournament CRUD** — `src/lib/validation/tournament.ts` (create/update schemas,
+      empty-string-to-null coercion for the nullable §10 fields), `src/app/admin/tournaments/
+      actions.ts` (createTournament/updateTournament/cancelTournament), list page
+      (`src/app/admin/tournaments/page.tsx`) with `CreateTournamentDialog` (inline panel, same
+      pattern as `AddPlayerDialog`), and a detail/edit page (`[id]/page.tsx` +
+      `TournamentEditForm`) covering all §10 fields plus a status dropdown — admin can set any
+      status directly (no state-machine guard yet; that belongs with the stage/match engine in
+      later phases). Status starts `DRAFT` on create per §10.
+      **Verified:** `npm run build`/`lint` pass; confirmed the insert shape against the live
+      schema directly (`supabase db query --linked`, rolled back) — defaults (DRAFT/21/2/30)
+      populate correctly. **Not yet exercised through the actual browser UI/RLS-as-admin** —
+      only server-action code paths and schema shape are checked so far.
+- [x] **3.2 Tournament stage model** — `src/lib/validation/stage.ts`,
+      `src/app/admin/tournaments/stage-actions.ts` (createStage/updateStage/deleteStage/
+      moveStage), `StagesManager` embedded in the tournament detail page. New stages append
+      at `max(stage_order)+1`; reordering swaps two rows through a temporary negative
+      `stage_order` (the `unique (tournament_id, stage_order)` constraint isn't DEFERRABLE, so
+      a direct two-row swap would collide mid-transaction).
+      **Verified:** `npm run build`/`lint` pass; the three-step reorder swap was exercised
+      directly against the live schema (`supabase db query --linked`, rolled back) and
+      produced the correct final order. Not yet exercised through the browser UI.
 - [ ] **3.3 Add players to tournament** — search-and-select existing players + inline "add new
       player" (§58), writes to `tournament_players`.
 - [ ] **3.4 Groups** — `tournament_groups` + `group_players` CRUD; admin UI to create groups
