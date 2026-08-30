@@ -1,0 +1,18 @@
+\
+# Minimal Supabase CLI config. Install the CLI to use it locally:
+#   macOS: brew install supabase/tap/supabase
+#   or: npx supabase <command>   (no global install needed)
+#
+# Then:
+#   supabase init          # only if this file is missing/incompatible with your CLI version
+#   supabase link --project-ref <your-project-ref>
+#   supabase db push        # applies supabase/migrations/*.sql to the linked project
+#   supabase gen types typescript --linked > src/lib/types/database.types.ts
+
+project_id = "badminton-scoring-app"
+
+[db]
+port = 54322
+
+[api]
+port = 54321
