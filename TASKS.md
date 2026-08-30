@@ -49,14 +49,32 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
 
 ## Phase 2 — Player Management (Admin)
 
-- [ ] **2.1 Player CRUD + email normalization** — `players` table service layer: trim/lowercase
-      email, duplicate detection on insert, unique constraint enforced at DB level too.
-- [ ] **2.2 Admin Players page** — list with columns from §7 (tournaments played, matches,
-      win %, rating, category, first/last played) — all derived via view/function, not stored
-      redundantly. Search (name/email), filter (All/New/Returning).
-- [ ] **2.3 New vs Returning derivation** — SQL view or function: "returning" = participated in
-      ≥1 tournament with status COMPLETED; no boolean column.
-- [ ] **2.4 Add Player flow** — form (React Hook Form + Zod), duplicate-found UX (§9).
+- [x] **2.1 Player CRUD + email normalization** — `normalizeEmail()` +
+      `addPlayerSchema` (`src/lib/validation/player.ts`), `addPlayer()` server action
+      (`src/app/admin/players/actions.ts`): validate → normalize → duplicate check → insert,
+      with a `23505`-race fallback in case two submissions land at once. DB-level
+      `players_email_is_normalized` CHECK + UNIQUE remain the backstop (0001).
+- [x] **2.2 Admin Players page** — `src/app/admin/players/page.tsx`, reads the
+      `player_directory` view (0003). Search (name/email via `ilike`), filter (All/New/
+      Returning) as URL params so the page stays server-rendered. Sorting/pagination
+      deliberately deferred to the fuller §42 dashboard in Phase 7.7 — this is the simpler §7
+      list.
+- [x] **2.3 New vs Returning derivation** — `player_directory.is_returning`
+      (0003_player_directory_view.sql): `EXISTS` against `tournament_players` joined to a
+      `COMPLETED` tournament. No boolean column anywhere — recomputed on every query.
+- [x] **2.4 Add Player flow** — `AddPlayerDialog` (inline panel, not a modal, per §54) +
+      server action. Duplicate-found UX shows the existing player's name/email inline (§9).
+      Used plain `useState`/`FormData` rather than React Hook Form — the form is two fields;
+      pulling in RHF here would be exactly the "unnecessary library" §2 warns against. Revisit
+      if a later form (tournament creation, match editing) is complex enough to justify it.
+
+  **Not yet run against a live database** — every phase above (schema, RLS, this view, this
+  UI) has been written and passes local build/lint, but nothing has executed against a real
+  Postgres/Supabase instance in this environment. Recommend creating a Supabase project (or
+  `supabase start` locally, if Docker is available) and running the migrations + RLS test
+  suite before trusting any of it further, and before generating real `database.types.ts` to
+  replace the current `any` placeholder — the placeholder is currently masking any
+  table/column typos.
 
 ## Phase 3 — Tournament & Stage Structure (Admin)
 
