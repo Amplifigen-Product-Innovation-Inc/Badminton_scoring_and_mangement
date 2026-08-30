@@ -137,8 +137,25 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
       confirmed the cascade-cleanup dropped them from the group too — checked in both the UI
       and the DB at each step, no console errors. Build/lint/vitest all pass. Test fixtures
       cleaned up afterward.
-- [ ] **3.5 Courts** — global `courts` table CRUD + per-tournament `tournament_courts` with
-      status (AVAILABLE/ASSIGNED/LIVE/COMPLETED).
+- [x] **3.5 Courts** — global registry: `src/lib/validation/court.ts`,
+      `src/app/admin/courts/actions.ts` (createCourt/deleteCourt — delete surfaces the
+      `on delete restrict` FK violation as a plain message, not a stack trace), `/admin/courts`
+      list page. Per-tournament: `src/app/admin/tournaments/court-actions.ts`
+      (searchAvailableCourts/addCourtsToTournament/addNewCourtAndAddToTournament/
+      updateTournamentCourtStatus/removeCourtFromTournament), `TournamentCourtsManager`
+      embedded in the tournament detail page — same search-and-select + inline "add new"
+      shape as players (3.3), plus a status dropdown per court
+      (AVAILABLE/ASSIGNED/LIVE/COMPLETED).
+      **Mobile-responsiveness pass:** per user direction, admin stays desktop-first (§54) but
+      must degrade cleanly on narrow screens. Fixed two `grid-cols-2` layouts (create-tournament
+      dialog, tournament edit form) that didn't wrap below `sm:`, and the edit form's
+      save/cancel row to wrap instead of overflow. Confirmed at a 390px viewport: nav wraps,
+      forms stack to one column, table/list rows stay legible, no horizontal scroll.
+      **Verified end-to-end** 2026-08-30: live-browser Playwright at both desktop and mobile
+      viewports — created a global court, attached it to a tournament via search, added a new
+      court inline, changed a court's status to LIVE, removed one court from the tournament
+      (confirmed it stayed in the global registry, not deleted), no console errors. Build/
+      lint/vitest all pass. Test fixtures cleaned up afterward.
 - [ ] **3.6 Match creation** — create matches within a group/stage, assign court, format
       (singles/doubles, Bo1/Bo3), scorer assignment (prefer court-level per §22).
 

@@ -71,7 +71,7 @@ export function CreateTournamentDialog() {
           placeholder="Tournament name"
           className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900"
         />
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <input
             name="date"
             type="date"

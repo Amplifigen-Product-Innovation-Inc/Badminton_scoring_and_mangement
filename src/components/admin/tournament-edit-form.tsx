@@ -72,7 +72,7 @@ export function TournamentEditForm({ tournament }: { tournament: Tournament }) {
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
           <label className="mb-1 block text-xs font-medium text-neutral-500">Date</label>
           <input
@@ -139,7 +139,7 @@ export function TournamentEditForm({ tournament }: { tournament: Tournament }) {
         </select>
       </div>
 
-      <div className="flex items-center justify-between pt-2">
+      <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
         <button
           type="button"
           onClick={handleCancel}
@@ -149,7 +149,7 @@ export function TournamentEditForm({ tournament }: { tournament: Tournament }) {
           {isCancelling ? "Cancelling…" : "Cancel tournament"}
         </button>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           {saved && <span className="text-sm text-emerald-600">Saved.</span>}
           {error && <span className="text-sm text-red-600">{error}</span>}
           <button
