@@ -119,15 +119,46 @@ export async function addNewPlayerAndAddToTournament(
 
 /**
  * Removes a player from the tournament roster. Deletes the row outright
- * rather than marking WITHDRAWN — at this phase no match/group data can
- * reference the player yet (3.3 predates match creation, 3.6), so there's
- * no history to preserve. Revisit to a status-flip once matches exist.
+ * rather than marking WITHDRAWN — at this phase no match data can
+ * reference the player yet (that lands in 3.6), so there's no match
+ * history to preserve. Revisit to a status-flip once matches exist.
+ *
+ * `group_players` has no FK back to `tournament_players` (a player is
+ * assigned to a group by player_id alone, via tournament_groups ->
+ * tournament_stages -> tournament_id), so removing someone from the
+ * roster doesn't automatically drop them from any group they were
+ * already assigned to. Clean that up explicitly here, scoped to this
+ * tournament's own groups only.
  */
 export async function removePlayerFromTournament(
   tournamentId: string,
   playerId: string
 ): Promise<PlayerActionResult> {
   const supabase = await createClient();
+
+  const { data: stages } = await supabase
+    .from("tournament_stages")
+    .select("id")
+    .eq("tournament_id", tournamentId);
+  const stageIds = (stages ?? []).map((s) => s.id);
+
+  if (stageIds.length > 0) {
+    const { data: groups } = await supabase
+      .from("tournament_groups")
+      .select("id")
+      .in("stage_id", stageIds);
+    const groupIds = (groups ?? []).map((g) => g.id);
+
+    if (groupIds.length > 0) {
+      const { error: groupCleanupError } = await supabase
+        .from("group_players")
+        .delete()
+        .eq("player_id", playerId)
+        .in("group_id", groupIds);
+      if (groupCleanupError) return { status: "error", message: groupCleanupError.message };
+    }
+  }
+
   const { error } = await supabase
     .from("tournament_players")
     .delete()

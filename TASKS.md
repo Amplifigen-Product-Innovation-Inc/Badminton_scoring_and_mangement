@@ -119,8 +119,24 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
       searched and added an existing global player, added a brand-new player through the
       inline form, removed one, confirmed roster counts/rows in both the UI and the DB at each
       step, no console errors. Test fixtures cleaned up afterward.
-- [ ] **3.4 Groups** — `tournament_groups` + `group_players` CRUD; admin UI to create groups
-      and assign players within a stage.
+- [x] **3.4 Groups** — `src/lib/validation/group.ts`,
+      `src/app/admin/tournaments/group-actions.ts` (createGroup/deleteGroup/addPlayerToGroup/
+      removePlayerFromGroup, scoped per stage), `GroupsManager` embedded in the tournament
+      detail page — per-stage group list, assignment dropdown sourced from the tournament's
+      existing roster (3.3).
+      **Found and fixed a real gap while verifying:** `group_players` has no FK back to
+      `tournament_players` — a player is only linked to a group via player_id, through
+      tournament_groups -> tournament_stages -> tournament_id. Removing a player from the
+      tournament roster (3.3's removePlayerFromTournament) left them stranded in any group
+      they'd already been assigned to. Fixed by explicitly deleting the player's
+      `group_players` rows (scoped to this tournament's own stages/groups) before removing the
+      roster row.
+      **Verified end-to-end** 2026-08-30: live-browser Playwright — added a GROUP stage,
+      added two roster players, created "Group A", assigned both, removed one from the group
+      only (roster unaffected), then removed the other from the tournament roster entirely and
+      confirmed the cascade-cleanup dropped them from the group too — checked in both the UI
+      and the DB at each step, no console errors. Build/lint/vitest all pass. Test fixtures
+      cleaned up afterward.
 - [ ] **3.5 Courts** — global `courts` table CRUD + per-tournament `tournament_courts` with
       status (AVAILABLE/ASSIGNED/LIVE/COMPLETED).
 - [ ] **3.6 Match creation** — create matches within a group/stage, assign court, format
