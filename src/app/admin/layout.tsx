@@ -1,13 +1,20 @@
 import Link from "next/link";
+import { LogoutButton } from "@/components/auth/logout-button";
 
-// §6 — only routes that exist get a nav item; a not-yet-built page (Scorers,
-// Categories, Settings) stays out of the nav rather than showing a dead link.
+// §6 — only routes that exist get a nav item; a not-yet-built page
+// (Categories) stays out of the nav rather than showing a dead link.
+// "Scorer" links to the scorer screen itself — useful for an admin who's
+// also scoring, or previewing what a scorer sees — not a separate admin
+// feature; RLS still scopes it to whatever match is actually assigned to
+// the logged-in account.
 const NAV_ITEMS = [
   { href: "/admin", label: "Dashboard" },
   { href: "/admin/tournaments", label: "Tournaments" },
   { href: "/admin/matches", label: "Live Courts" },
   { href: "/admin/players", label: "Players" },
+  { href: "/admin/leaderboard", label: "Leaderboard" },
   { href: "/admin/courts", label: "Courts" },
+  { href: "/scorer", label: "Scorer" },
   { href: "/admin/settings", label: "Settings" },
 ];
 
@@ -32,6 +39,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               {item.label}
             </Link>
           ))}
+          <LogoutButton className="ml-auto rounded-md px-3 py-1.5 text-sm text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900" />
         </nav>
       </header>
       {children}

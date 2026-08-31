@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 
 /**
  * Password-based login (§70 addendum). Admin accounts are provisioned directly;
@@ -56,8 +58,8 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-neutral-50 px-4">
-      <div className="w-full max-w-sm rounded-2xl border border-neutral-200 bg-white p-8 shadow-sm">
+    <main className="flex min-h-screen items-center justify-center bg-background px-4">
+      <Card className="w-full max-w-sm" padding="lg">
         <h1 className="text-xl font-semibold text-neutral-900">Sign in</h1>
         <p className="mt-1 text-sm text-neutral-500">
           {mode === "password"
@@ -92,17 +94,13 @@ export default function LoginPage() {
                 className="w-full rounded-lg border border-neutral-300 px-4 py-3 text-base outline-none focus:border-neutral-900"
               />
             )}
-            <button
-              type="submit"
-              disabled={status === "loading"}
-              className="w-full rounded-lg bg-neutral-900 px-4 py-3 text-base font-medium text-white disabled:opacity-50"
-            >
+            <Button type="submit" disabled={status === "loading"} size="lg" className="w-full">
               {status === "loading"
                 ? "Please wait…"
                 : mode === "password"
                   ? "Sign in"
                   : "Send reset link"}
-            </button>
+            </Button>
             {status === "error" && errorMessage && (
               <p className="text-sm text-red-600">{errorMessage}</p>
             )}
@@ -120,7 +118,7 @@ export default function LoginPage() {
         >
           {mode === "password" ? "Forgot your password?" : "Back to sign in"}
         </button>
-      </div>
+      </Card>
     </main>
   );
 }

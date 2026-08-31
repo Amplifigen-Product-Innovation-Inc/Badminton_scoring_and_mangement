@@ -66,6 +66,11 @@ export function MatchesManager({
   const [scorerId, setScorerId] = useState("");
   const [team1, setTeam1] = useState<Set<string>>(new Set());
   const [team2, setTeam2] = useState<Set<string>>(new Set());
+  // §30/§45 cross-category: each team's own source group, distinct from the
+  // match-level `groupId` above (which only applies when both teams share
+  // one group — the ordinary group-stage case).
+  const [team1SourceGroupId, setTeam1SourceGroupId] = useState("");
+  const [team2SourceGroupId, setTeam2SourceGroupId] = useState("");
 
   const stageId =
     selectedStageId && stages.some((s) => s.id === selectedStageId)
@@ -73,6 +78,7 @@ export function MatchesManager({
       : (stages[0]?.id ?? "");
 
   const selectedStage = stages.find((s) => s.id === stageId);
+  const isCrossCategoryStage = selectedStage?.stage_type === "CROSS_CATEGORY";
   const candidatePlayers = useMemo(() => {
     if (groupId) {
       const group = selectedStage?.groups.find((g) => g.id === groupId);
@@ -80,6 +86,24 @@ export function MatchesManager({
     }
     return roster;
   }, [groupId, selectedStage, roster]);
+
+  // §30/§45 — every group across the whole tournament, not just this
+  // stage's own (a CROSS_CATEGORY stage typically has none of its own —
+  // its teams are qualified pairs pulled from the earlier GROUP stages).
+  const allGroups = useMemo(() => {
+    const map = new Map<string, Group>();
+    for (const stage of stages) for (const g of stage.groups) map.set(g.id, g);
+    return Array.from(map.values());
+  }, [stages]);
+
+  const team1CandidatePlayers =
+    isCrossCategoryStage && team1SourceGroupId
+      ? (allGroups.find((g) => g.id === team1SourceGroupId)?.players ?? [])
+      : candidatePlayers;
+  const team2CandidatePlayers =
+    isCrossCategoryStage && team2SourceGroupId
+      ? (allGroups.find((g) => g.id === team2SourceGroupId)?.players ?? [])
+      : candidatePlayers;
 
   const requiredPerTeam = matchType === "SINGLES" ? 1 : 2;
 
@@ -115,6 +139,8 @@ export function MatchesManager({
   function resetTeams() {
     setTeam1(new Set());
     setTeam2(new Set());
+    setTeam1SourceGroupId("");
+    setTeam2SourceGroupId("");
   }
 
   function handleCreate(e: React.FormEvent<HTMLFormElement>) {
@@ -123,6 +149,8 @@ export function MatchesManager({
     const input = {
       stageId,
       groupId: groupId || null,
+      team1SourceGroupId: team1SourceGroupId || null,
+      team2SourceGroupId: team2SourceGroupId || null,
       matchType,
       bestOf,
       courtId: courtId || null,
@@ -318,6 +346,53 @@ export function MatchesManager({
           )}
         </div>
 
+        {isCrossCategoryStage && (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-neutral-500">
+                Team 1&rsquo;s group
+              </label>
+              <select
+                value={team1SourceGroupId}
+                onChange={(e) => {
+                  setTeam1SourceGroupId(e.target.value);
+                  setTeam1(new Set());
+                }}
+                className="w-full rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand-500"
+              >
+                <option value="">Any player</option>
+                {allGroups.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.name}
+                    {g.category ? ` · ${g.category}` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-neutral-500">
+                Team 2&rsquo;s group
+              </label>
+              <select
+                value={team2SourceGroupId}
+                onChange={(e) => {
+                  setTeam2SourceGroupId(e.target.value);
+                  setTeam2(new Set());
+                }}
+                className="w-full rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand-500"
+              >
+                <option value="">Any player</option>
+                {allGroups.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.name}
+                    {g.category ? ` · ${g.category}` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <label className="mb-1 block text-xs font-medium text-neutral-500">Format</label>
@@ -395,10 +470,10 @@ export function MatchesManager({
               Team 1 ({requiredPerTeam} player{requiredPerTeam > 1 ? "s" : ""})
             </label>
             <div className="max-h-40 overflow-y-auto rounded-lg border border-surface-border">
-              {candidatePlayers.length === 0 && (
+              {team1CandidatePlayers.length === 0 && (
                 <p className="px-3 py-2 text-sm text-neutral-400">No players available.</p>
               )}
-              {candidatePlayers.map((p) => (
+              {team1CandidatePlayers.map((p) => (
                 <label
                   key={p.id}
                   className="flex items-center gap-2 border-b border-neutral-50 px-3 py-2 text-sm last:border-0 hover:bg-neutral-50"
@@ -420,10 +495,10 @@ export function MatchesManager({
               Team 2 ({requiredPerTeam} player{requiredPerTeam > 1 ? "s" : ""})
             </label>
             <div className="max-h-40 overflow-y-auto rounded-lg border border-surface-border">
-              {candidatePlayers.length === 0 && (
+              {team2CandidatePlayers.length === 0 && (
                 <p className="px-3 py-2 text-sm text-neutral-400">No players available.</p>
               )}
-              {candidatePlayers.map((p) => (
+              {team2CandidatePlayers.map((p) => (
                 <label
                   key={p.id}
                   className="flex items-center gap-2 border-b border-neutral-50 px-3 py-2 text-sm last:border-0 hover:bg-neutral-50"

@@ -77,27 +77,42 @@
   --touch-target: 2.75rem; /* 44px minimum, §42 */
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --background: var(--color-neutral-950);
-    --foreground: var(--color-neutral-50);
-    --surface: var(--color-neutral-900);
-    --surface-border: var(--color-neutral-700);
-  }
-}
-
-:root[data-theme="dark"] {
-  --background: var(--color-neutral-950);
-  --foreground: var(--color-neutral-50);
-  --surface: var(--color-neutral-900);
-  --surface-border: var(--color-neutral-700);
-}
+/* Dark mode was tried and reverted — light-only for now. Several
+   hand-styled screens hardcoded bg-white/text-neutral-900 (assuming those
+   are always "white"/"near-black") rather than the flipping semantic
+   tokens, which produced unreadable dark-on-dark text once the neutral
+   scale itself was made theme-reactive. Rather than half-fix it, this app
+   is light-only until dark mode is redone with every screen actually
+   verified against it — see TASKS.md. No @media (prefers-color-scheme:
+   dark) or [data-theme="dark"] override exists: --background/--foreground/
+   --surface/--surface-border and the neutral scale always resolve to their
+   :root (light) values, regardless of system preference. */
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-surface: var(--surface);
   --color-surface-border: var(--surface-border);
+
+  /* Registering the neutral scale here (rather than leaving it as a plain
+     :root custom property) is what makes `text-neutral-900`, `bg-neutral-50`,
+     etc. actually resolve to THESE values instead of Tailwind's own static
+     built-in neutral palette — which never changes for dark mode. Without
+     this, --background/--surface correctly flip dark (defined above) while
+     nearly every component's text stays on the light-mode neutral-900,
+     rendering as invisible dark-on-dark. */
+  --color-neutral-0: var(--color-neutral-0);
+  --color-neutral-50: var(--color-neutral-50);
+  --color-neutral-100: var(--color-neutral-100);
+  --color-neutral-200: var(--color-neutral-200);
+  --color-neutral-300: var(--color-neutral-300);
+  --color-neutral-400: var(--color-neutral-400);
+  --color-neutral-500: var(--color-neutral-500);
+  --color-neutral-600: var(--color-neutral-600);
+  --color-neutral-700: var(--color-neutral-700);
+  --color-neutral-800: var(--color-neutral-800);
+  --color-neutral-900: var(--color-neutral-900);
+  --color-neutral-950: var(--color-neutral-950);
 
   --color-brand-50: var(--color-brand-50);
   --color-brand-100: var(--color-brand-100);

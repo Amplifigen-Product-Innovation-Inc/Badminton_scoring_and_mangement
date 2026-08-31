@@ -60,7 +60,7 @@ export default async function ScorerHomePage() {
             (t?.match_participants ?? []).map((mp) => mp.players?.name).filter(Boolean).join(" / ");
 
           return (
-            <div key={m.id} className="rounded-xl border border-neutral-200 bg-white p-4">
+            <div key={m.id} className="rounded-xl border border-surface-border bg-surface p-4">
               <p className="text-xs text-neutral-400">
                 {m.tournaments?.name} · Match #{m.match_number} · {m.match_type} · Bo{m.best_of}
               </p>

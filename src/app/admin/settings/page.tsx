@@ -1,11 +1,16 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { Card } from "@/components/ui/card";
-import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { EmptyState } from "@/components/ui/empty-state";
 
-/** §50 — admin settings. Theme is the only setting so far; everything else
- * (tournament defaults, notification preferences) is deliberately not
- * built ahead of a real need (§52: don't over-design). */
+/**
+ * §50 — admin settings. Dark mode was tried and pulled: the neutral color
+ * scale wasn't wired for it consistently across every hand-styled screen
+ * (some used the flipping semantic tokens, some hardcoded bg-white/
+ * text-neutral-900), so switching produced unreadable dark-on-dark text in
+ * places. Reverted to light-only until it's redone properly rather than
+ * ship a half-working toggle. Nothing else is configurable yet either
+ * (§52: don't over-design ahead of a real need).
+ */
 export default async function AdminSettingsPage() {
   const supabase = await createClient();
   const {
@@ -24,15 +29,12 @@ export default async function AdminSettingsPage() {
     <main className="mx-auto max-w-2xl px-6 py-10">
       <h1 className="text-2xl font-semibold text-neutral-900">Settings</h1>
 
-      <Card className="mt-6" padding="lg">
-        <h2 className="text-sm font-semibold text-neutral-900">Appearance</h2>
-        <p className="mt-1 text-sm text-neutral-500">
-          Choose how the admin dashboard looks on this device.
-        </p>
-        <div className="mt-3">
-          <ThemeToggle />
-        </div>
-      </Card>
+      <div className="mt-6">
+        <EmptyState
+          title="Nothing to configure yet"
+          description="Settings land here as they're needed."
+        />
+      </div>
     </main>
   );
 }

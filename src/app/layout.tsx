@@ -24,15 +24,14 @@ export const metadata: Metadata = {
 };
 
 // §44 — standalone-ready viewport: no user-scalable pinch-zoom fighting the
-// scorer's large touch targets, and a theme-color that matches light/dark.
+// scorer's large touch targets. Single theme-color — the app is light-only
+// (see globals.css), so a dark-mode variant would mislead the OS/browser
+// chrome into a dark swatch above a page that never actually goes dark.
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f8fafa" },
-    { media: "(prefers-color-scheme: dark)", color: "#0c1211" },
-  ],
+  themeColor: "#f8fafa",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

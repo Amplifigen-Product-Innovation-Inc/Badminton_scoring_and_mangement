@@ -7,6 +7,7 @@ import { TournamentPlayersManager } from "@/components/admin/tournament-players-
 import { GroupsManager } from "@/components/admin/groups-manager";
 import { TournamentCourtsManager } from "@/components/admin/tournament-courts-manager";
 import { MatchesManager } from "@/components/admin/matches-manager";
+import { CrossCategoryStandings } from "@/components/admin/cross-category-standings";
 import { TournamentProgress, type ProgressStepStatus } from "@/components/ui/tournament-progress";
 import { LiveBadge } from "@/components/ui/badge";
 
@@ -97,6 +98,20 @@ export default async function TournamentDetailPage({
       })),
   }));
 
+  // §30/§31 — cross_category_standings is per CROSS_CATEGORY-type stage,
+  // same small-fan-out shape as the group standings above.
+  const crossCategoryStageIds = (stages ?? [])
+    .filter((s) => s.stage_type === "CROSS_CATEGORY")
+    .map((s) => s.id);
+  const crossCategoryStandingsByStage = new Map(
+    await Promise.all(
+      crossCategoryStageIds.map(async (sid) => {
+        const { data } = await supabase.rpc("cross_category_standings", { p_stage_id: sid });
+        return [sid, data ?? []] as const;
+      })
+    )
+  );
+
   const { data: courtRows } = await supabase
     .from("tournament_courts")
     .select("status, courts(id, name)")
@@ -178,6 +193,11 @@ export default async function TournamentDetailPage({
         <TournamentPlayersManager tournamentId={id} roster={roster} />
         <StagesManager tournamentId={id} stages={stages ?? []} />
         <GroupsManager tournamentId={id} stages={stagesWithGroups} roster={roster} />
+        {crossCategoryStageIds.map((sid) => {
+          const stage = stages!.find((s) => s.id === sid)!;
+          const rows = crossCategoryStandingsByStage.get(sid) ?? [];
+          return <CrossCategoryStandings key={sid} stageName={stage.name} rows={rows} />;
+        })}
         <TournamentCourtsManager tournamentId={id} courts={courts} />
         <MatchesManager
           tournamentId={id}

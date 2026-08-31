@@ -3,6 +3,7 @@
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createCourt } from "@/app/admin/courts/actions";
+import { Button } from "@/components/ui/button";
 
 /** Same inline-panel pattern as AddPlayerDialog/CreateTournamentDialog. */
 export function CreateCourtDialog() {
@@ -32,17 +33,12 @@ export function CreateCourtDialog() {
 
   if (!open) {
     return (
-      <button
-        onClick={() => setOpen(true)}
-        className="rounded-lg bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-800"
-      >
-        + Add Court
-      </button>
+      <Button onClick={() => setOpen(true)}>+ Add Court</Button>
     );
   }
 
   return (
-    <div className="w-full max-w-sm rounded-xl border border-neutral-200 bg-white p-5 shadow-sm">
+    <div className="w-full max-w-sm rounded-xl border border-surface-border bg-surface p-5 shadow-sm">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold text-neutral-900">Add court</h2>
         <button
