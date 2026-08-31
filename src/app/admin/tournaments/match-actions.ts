@@ -142,3 +142,22 @@ export async function cancelMatch(matchId: string, tournamentId: string): Promis
   revalidatePath(`/admin/tournaments/${tournamentId}`);
   return { status: "ok" };
 }
+
+/**
+ * §45/§46 "reopen match" — thin wrapper over the reopen_match RPC
+ * (0008_reopen_match.sql), which does the real work: reverses a COMPLETED
+ * match back to LIVE and precisely undoes its rating/tournament_player_stats
+ * side effects using the values complete_match itself recorded in
+ * player_rating_history, rather than re-deriving them. Rallies/games are
+ * left untouched, so the match is immediately ready for correction
+ * (edit/add/delete a rally, §46) and re-completion.
+ */
+export async function reopenMatch(matchId: string, tournamentId: string): Promise<MatchActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("reopen_match", { p_match_id: matchId });
+
+  if (error) return { status: "error", message: error.message };
+
+  revalidatePath(`/admin/tournaments/${tournamentId}`);
+  return { status: "ok" };
+}

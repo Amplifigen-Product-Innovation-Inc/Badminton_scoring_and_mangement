@@ -458,6 +458,14 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
       replace their hand-typed stub for 0007 and pick up 0008. This commit is scoped to
       `supabase/migrations`, `supabase/tests/database`, `TASKS.md`, and the regenerated
       `database.types.ts` only — their UI changes are theirs to commit.
+      **UI wiring:** `reopenMatch` added to `src/app/admin/tournaments/match-actions.ts`
+      (clean isolated diff, committed) and a "Reopen" button for `COMPLETED` matches in
+      `src/components/admin/matches-manager.tsx` (not committed — that file already carried
+      the other session's uncommitted redesign, so the two are now interleaved there; the
+      button ships whenever they commit that file). Verified live end-to-end via Playwright
+      against the real (redesigned) admin UI: completed a match, clicked Reopen, confirmed
+      the LIVE badge and the DB's rating/matches_count/tournament_player_stats reversion, no
+      console errors.
 
 ## Phase 7 — Admin Dashboards & History
 
