@@ -71,7 +71,10 @@ export default async function TournamentsPage() {
               {tournaments?.map((t) => (
                 <tr key={t.id} className="hover:bg-neutral-50">
                   <td className="px-4 py-3 font-medium text-neutral-900">
-                    <Link href={`/admin/tournaments/${t.id}`} className="hover:underline">
+                    <Link
+                      href={`/admin/tournaments/${t.id}`}
+                      className="text-brand-700 underline decoration-brand-200 underline-offset-2 hover:decoration-brand-700"
+                    >
                       {t.name}
                     </Link>
                   </td>

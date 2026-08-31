@@ -131,7 +131,10 @@ export default async function PlayersPage({
                 {players?.map((p) => (
                   <tr key={p.id} className="hover:bg-neutral-50">
                     <td className="px-4 py-3">
-                      <Link href={`/admin/players/${p.id}`} className="font-medium text-neutral-900 hover:underline">
+                      <Link
+                        href={`/admin/players/${p.id}`}
+                        className="font-medium text-brand-700 underline decoration-brand-200 underline-offset-2 hover:decoration-brand-700"
+                      >
                         {p.name}
                       </Link>
                       <div>
@@ -160,7 +163,9 @@ export default async function PlayersPage({
               <Card key={p.id} padding="md">
                 <div className="flex items-start justify-between gap-3">
                   <Link href={`/admin/players/${p.id}`}>
-                    <p className="font-medium text-neutral-900 hover:underline">{p.name}</p>
+                    <p className="font-medium text-brand-700 underline decoration-brand-200 underline-offset-2">
+                      {p.name}
+                    </p>
                     <p className="text-xs text-neutral-500">{p.email}</p>
                   </Link>
                   <div className="text-right">
