@@ -312,6 +312,34 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
       findings as 4.1-4.3, plus `complete_match` itself being `authenticated`-callable, which is
       intentional.
 
+- [x] **4.8 Match lifecycle RPCs (gap-fill, discovered building 5.1)** —
+      `supabase/migrations/0006_match_lifecycle.sql`. 0002_rls_policies.sql's own design comment
+      anticipated three RPCs — "start_match, complete_match, undo_last_rally" — but the actual
+      4.1-4.7 item list never included `start_match`, so it was never built. Without it a match
+      can never leave `SCHEDULED`: scorers have no direct UPDATE grant on `matches`, and the
+      rallies insert policy requires `m.status = 'LIVE'` — no rally could ever be recorded at
+      all. Same gap for `games`: scorer is SELECT-only, so game-row creation (game 1 at match
+      start, game 2/3 for Bo3) also needs an RPC, not a client insert.
+      - `start_match(match_id)`: SCHEDULED -> LIVE, creates game 1.
+      - `start_next_game(match_id)`: creates the next game once the current one is COMPLETED
+        and the match isn't already decided (that's `complete_match`'s job instead) — refuses
+        past `best_of`.
+      Same SECURITY DEFINER + admin/scorer-authorization shape as `undo_last_rally`/
+      `complete_match`.
+      **Found and fixed one real bug while verifying (again, insertion order):** a fixture bulk-
+      inserted a match's winning team's full point total *before* the losing team's — which
+      auto-completes the game after the first insert (via 4.2's trigger), so the second bulk
+      insert then got rejected by RLS as a write into a no-longer-`IN_PROGRESS` game. Same class
+      of mistake as 0003's fixtures; fixed the same way (below-target team's points land first).
+      **Verified end-to-end** 2026-08-30: 12 pgTAP assertions
+      (`supabase/tests/database/0004_match_lifecycle.test.sql`) — SCHEDULED->LIVE + game 1
+      creation, authorization, can't restart, can't skip ahead while a game is in progress,
+      Bo3 continuation once a game completes, refusing to start another game once the match is
+      already decided, refusing past `best_of`. Reran 0001-0003 (25/25, 28/28, 34/34) to confirm
+      no regression. Build/lint/vitest pass against regenerated types; `db advisors` clean
+      beyond the same pre-existing findings plus these two functions being intentionally
+      `authenticated`-callable.
+
 ## Phase 5 — Scorer UI (highest priority UX)
 
 - [ ] **5.1 Scorer login + assigned court view** — mobile-first, shows assigned court/match only

@@ -981,6 +981,8 @@ export type Database = {
       is_admin: { Args: never; Returns: boolean }
       is_scorer: { Args: never; Returns: boolean }
       recompute_game_score: { Args: { p_game_id: string }; Returns: undefined }
+      start_match: { Args: { p_match_id: string }; Returns: undefined }
+      start_next_game: { Args: { p_match_id: string }; Returns: undefined }
       undo_last_rally: { Args: { p_game_id: string }; Returns: undefined }
     }
     Enums: {
