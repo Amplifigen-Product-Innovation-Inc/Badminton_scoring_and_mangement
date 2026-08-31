@@ -978,9 +978,32 @@ export type Database = {
         Returns: number
       }
       complete_match: { Args: { p_match_id: string }; Returns: undefined }
+      compute_group_qualification: {
+        Args: { p_group_id: string }
+        Returns: undefined
+      }
+      group_standings: {
+        Args: { p_group_id: string }
+        Returns: {
+          aggregate_performance: number
+          game_differential: number
+          lost: number
+          played: number
+          player_id: string
+          player_name: string
+          rank: number
+          tournament_points: number
+          won: number
+        }[]
+      }
       is_admin: { Args: never; Returns: boolean }
       is_scorer: { Args: never; Returns: boolean }
+      override_group_qualification: {
+        Args: { p_group_id: string; p_player_id: string; p_rank: number }
+        Returns: undefined
+      }
       recompute_game_score: { Args: { p_game_id: string }; Returns: undefined }
+      reopen_match: { Args: { p_match_id: string }; Returns: undefined }
       start_match: { Args: { p_match_id: string }; Returns: undefined }
       start_next_game: { Args: { p_match_id: string }; Returns: undefined }
       undo_last_rally: { Args: { p_game_id: string }; Returns: undefined }

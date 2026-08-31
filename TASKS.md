@@ -393,18 +393,71 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
 
 ## Phase 6 — Group Standings, Qualification, Temporary Teams
 
-- [ ] **6.1 Group standings view** — tournament_points DESC + tie-break chain (§70, supersedes
-      §14): H2H → aggregate group-stage normalized performance (summed winners/drops across
-      completed group-stage matches only, not averaged per-match; unavailable if
-      winners+drops=0, skip to next rule) → game differential → admin override. Scoped strictly
-      to completed group-stage matches — cross-category/final matches must not leak in.
-- [ ] **6.2 Top-2 qualification** — computed + **persisted** (§15) qualification record per
-      group, not recalculated-and-discarded on every render.
-- [ ] **6.3 Temporary team creation** — admin UI "Create Qualified Team" (§44), writes `teams` +
-      `match_participants` scoped to a specific match; explicitly no permanent team table/entity
-      anywhere in the schema.
-- [ ] **6.4 Cross-category match creation** — admin builds matches from qualified teams across
-      groups (§17, §45): assign court/scorer, edit/replace player, cancel/reopen.
+- [x] **6.1 Group standings view** — `group_standings(p_group_id)`,
+      `supabase/migrations/0007_group_standings.sql`. §70 tie-break chain: tournament_points
+      DESC → head-to-head → aggregate group-stage performance → game differential. Scoped
+      strictly to `matches.group_id = p_group_id AND status = 'COMPLETED'` — cross-category/
+      final matches (`group_id` NULL) structurally cannot leak in. Admin-only (SECURITY
+      DEFINER bypasses RLS internally, so this needed its own `is_admin()` check — a scorer
+      has zero RLS visibility into group/tournament data by design, and this function
+      shouldn't be the backdoor around that).
+      **Scope decision:** head-to-head is only applied for a clean 2-way tie on points — a
+      3+-way tie falls straight through to aggregate performance instead. PRODUCT_SPEC.md
+      defines H2H unambiguously for two players (did A beat B?) but doesn't specify a
+      round-robin mini-league tie-break for 3+, which is a substantially larger, separately-
+      specified problem. Documented in the migration's file header.
+- [x] **6.2 Top-2 qualification** — `compute_group_qualification(p_group_id)` (same
+      migration): reads `group_standings`, **persists** ranks 1-2 into `group_qualifications`
+      (§15 — never recalculated-and-discarded), and leaves any admin-overridden rank
+      untouched on a recompute. `override_group_qualification(p_group_id, p_player_id,
+      p_rank)`: admin manually sets a rank (§44), marked `is_override` so it survives future
+      recomputes. Both admin-only.
+      **Verified end-to-end** 2026-08-30: 27 pgTAP assertions
+      (`supabase/tests/database/0005_group_standings.test.sql`) — three hand-constructed
+      scenarios each isolating one tie-break level (no ties; a clean 2-way H2H tie; a 2-way
+      tie where H2H is unavailable because the pair never played each other, resolved by
+      performance), a cross-category match proven not to affect group points, qualification
+      persistence, override survival across a recompute, and authorization (scorer blocked
+      from all three functions, including calling `group_standings` directly). Found and fixed
+      two real bugs while verifying: matches never actually reached `status = 'COMPLETED'` in
+      the fixtures (that only happens via `complete_match`, not automatically when a game
+      completes — the test was checking a filter against data it never actually satisfied),
+      and the missing `is_admin()` check on `group_standings` itself (caught by writing the
+      "scorer cannot call this" test the same way every other RPC in this codebase gets one).
+      Reran 0001-0004 to confirm no regression.
+- [x] **6.3 Temporary team creation** — needed no new backend code. `teams`/
+      `match_participants` are already match-scoped with no permanent team entity anywhere in
+      the schema (0001_init_schema.sql), and `createMatch` (3.6) already accepts an arbitrary
+      player list — "Create Qualified Team" is a UI-level concern (picking from
+      `group_qualifications` instead of the full roster), not a new database capability.
+- [x] **6.4 Cross-category match creation** — likewise needed no new match-creation backend:
+      a cross-category match is just `createMatch` with `group_id` omitted, and `cancelMatch`
+      (3.6) already works regardless of `group_id`. The one genuinely missing piece — "reopen
+      match" (§45/§46, listed explicitly in this task and nowhere else in the codebase) — is
+      `reopen_match(p_match_id)`, `supabase/migrations/0008_reopen_match.sql`: the reverse of
+      `complete_match`, admin-only. Undoes each participant's rating update and
+      `tournament_player_stats` contribution using the exact values `complete_match` itself
+      recorded in `player_rating_history` (previous_rating, match_performance) rather than
+      re-deriving them, then clears `matches.status/completed_at/winner_team_id` back to
+      LIVE/NULL. Never touches `rallies`/`games` — a reopened match's history is exactly as it
+      was, ready for correction and re-completion.
+      **Found and fixed a real bug while verifying:** a `CASE WHEN ... THEN NULL ELSE
+      <division> END` guarding a divide-by-zero, written inline inside an `UPDATE ... SET`
+      list, still raised `division by zero` — the short-circuit didn't prevent evaluation the
+      way the identical expression does as a standalone `SELECT`. Fixed by computing the
+      value as a plain plpgsql variable (`IF ... THEN ... ELSE ... END IF`) before the
+      `UPDATE` instead of inline in the SQL. Verified via 12 pgTAP assertions
+      (`supabase/tests/database/0006_reopen_match.test.sql`): a completed match's rating/
+      confidence/category/stats revert to exactly their pre-match values, `player_rating_
+      history` rows are removed, raw rallies are untouched, a scorer cannot reopen, and a
+      non-COMPLETED match cannot be reopened. Reran 0001-0005 to confirm no regression.
+      **Coordination note:** built alongside a concurrent session
+      (`badminton-scoring-app-f3`) doing the Phase 6 UI + a broader admin dashboard redesign
+      on the same working tree. Confirmed no overlap (they reached the same "6.3/6.4 needs no
+      new DB entity" conclusion independently); ran a real `supabase gen types` pass to
+      replace their hand-typed stub for 0007 and pick up 0008. This commit is scoped to
+      `supabase/migrations`, `supabase/tests/database`, `TASKS.md`, and the regenerated
+      `database.types.ts` only — their UI changes are theirs to commit.
 
 ## Phase 7 — Admin Dashboards & History
 
