@@ -61,8 +61,16 @@ export async function createMatch(
   const { data: teams, error: teamsError } = await supabase
     .from("teams")
     .insert([
-      { match_id: match.id, team_number: 1, source_group_id: data.groupId },
-      { match_id: match.id, team_number: 2, source_group_id: data.groupId },
+      {
+        match_id: match.id,
+        team_number: 1,
+        source_group_id: data.team1SourceGroupId ?? data.groupId,
+      },
+      {
+        match_id: match.id,
+        team_number: 2,
+        source_group_id: data.team2SourceGroupId ?? data.groupId,
+      },
     ])
     .select("id, team_number");
 

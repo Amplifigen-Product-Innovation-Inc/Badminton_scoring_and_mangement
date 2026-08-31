@@ -15,6 +15,14 @@ export const createMatchSchema = z
   .object({
     stageId: z.string().uuid(),
     groupId: z.preprocess(emptyToNull, z.string().uuid().nullable()),
+    // §17/§45 cross-category matches: team1 and team2 are qualified pairs
+    // drawn from TWO DIFFERENT groups, so a single match-level `groupId`
+    // (shared by both teams) can't represent that. These are optional and
+    // backward compatible — when omitted, each team's source_group_id
+    // falls back to `groupId` exactly as before (the group-stage case,
+    // where both teams genuinely do share one group).
+    team1SourceGroupId: z.preprocess(emptyToNull, z.string().uuid().nullable()).optional(),
+    team2SourceGroupId: z.preprocess(emptyToNull, z.string().uuid().nullable()).optional(),
     matchType: z.enum(matchTypeValues),
     bestOf: z.coerce
       .number()

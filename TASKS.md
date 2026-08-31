@@ -523,3 +523,43 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
 
 1. Multi-tenant is still just an assumption, not a confirmed decision — revisit only if it
    comes up; doesn't block any current phase.
+
+## Post-launch fixes & additions (found using the deployed app)
+
+- [x] **Mobile link visibility** — tournament/player list names relied on `hover:underline` only
+      (no visible affordance on touch devices) — this was the actual cause of a "no option to
+      edit the tournament" report. Fixed with an always-visible brand-colored underline.
+- [x] **Per-team source group for cross-category matches** — `createMatch` (3.6) applied one
+      `groupId` to both teams uniformly; correct for group-stage matches (both players share a
+      group) but wrong for cross-category ones, where team1/team2 are qualified pairs from
+      *different* groups. Added optional `team1SourceGroupId`/`team2SourceGroupId` (fall back
+      to `groupId` when omitted — the existing group-stage form needs no changes).
+- [x] **Cross-category standings** — `cross_category_standings(p_stage_id)`,
+      `supabase/migrations/0009_leaderboards.sql`. Per user spec: 2 points/win, tie-break =
+      total badminton points scored (not differential) across all of a team's matches. Grouped
+      by `teams.source_group_id` — since there's no permanent team entity, a team's rows across
+      separate round-robin matches are recovered by which group they were sourced from, not a
+      shared team id. Admin-only (SECURITY DEFINER bypasses RLS, same reasoning as
+      `group_standings`). UI is `badminton-scoring-app-f3`'s to build (Phase 6 DB/UI split).
+- [x] **Global player leaderboard** — `player_leaderboard()`, same migration. Two independent
+      columns per user request — current rating and cumulative career tournament points (summed
+      across every tournament a player has played, not just one) — rather than one blended
+      score; the UI sorts by whichever it wants. Admin-only.
+      **Found and fixed two real bugs while verifying:**
+      1. Same class of bug as `calculate_match_result` (Phase 4): `cross_category_standings`'s
+         own OUT parameters (`source_group_id`, `won`) shadowed bare column references to the
+         same names inside nested subqueries/FILTER clauses, causing "ambiguous column"
+         errors. Fixed by qualifying every occurrence with its table/CTE alias.
+      2. `player_names` returned each player's name once per match their team had played,
+         since a "team" is really the same 2 people re-inserted as fresh `teams` rows per
+         match. Fixed with `string_agg(DISTINCT ...)`.
+      **Verified end-to-end** 2026-08-30: 16 pgTAP assertions
+      (`supabase/tests/database/0007_leaderboards.test.sql`) — a 3-team round-robin with a
+      deliberate 3-way tie on points, verified broken correctly by total score; career points
+      summed correctly across two separate tournaments for the same player; both functions'
+      admin-only authorization. Reran 0001-0006 to confirm no regression (0001 shows one
+      count-based assertion now off by one — not a regression, an artifact of intentionally
+      leaving demo data live in the project; noted as a test-suite fragility, not a product
+      bug). Build/lint/vitest pass against regenerated types; `db advisors` clean beyond
+      pre-existing findings plus these two functions' intentional `authenticated`-callable
+      status.

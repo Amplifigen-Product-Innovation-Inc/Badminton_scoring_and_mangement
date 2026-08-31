@@ -982,6 +982,20 @@ export type Database = {
         Args: { p_group_id: string }
         Returns: undefined
       }
+      cross_category_standings: {
+        Args: { p_stage_id: string }
+        Returns: {
+          lost: number
+          played: number
+          player_names: string
+          points: number
+          rank: number
+          source_group_id: string
+          team_label: string
+          total_score: number
+          won: number
+        }[]
+      }
       group_standings: {
         Args: { p_group_id: string }
         Returns: {
@@ -1001,6 +1015,18 @@ export type Database = {
       override_group_qualification: {
         Args: { p_group_id: string; p_player_id: string; p_rank: number }
         Returns: undefined
+      }
+      player_leaderboard: {
+        Args: never
+        Returns: {
+          career_tournament_points: number
+          category: string
+          confidence: Database["public"]["Enums"]["rating_confidence_status"]
+          current_rating: number
+          name: string
+          player_id: string
+          tournaments_played: number
+        }[]
       }
       recompute_game_score: { Args: { p_game_id: string }; Returns: undefined }
       reopen_match: { Args: { p_match_id: string }; Returns: undefined }
