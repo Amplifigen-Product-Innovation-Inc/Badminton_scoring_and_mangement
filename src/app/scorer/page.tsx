@@ -1,16 +1,26 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { StartMatchButton } from "@/components/scorer/start-match-button";
+import { LiveBadge } from "@/components/ui/badge";
 
 /**
  * §22/5.1 — a scorer sees only their assigned court/matches. RLS
  * (0002_rls_policies.sql, matches_scorer_select_assigned) is what actually
- * enforces this — the `.eq("scorer_id", ...)` below is belt-and-suspenders
- * UX filtering, not the security boundary.
+ * enforces this — the `.eq("scorer_id", ...)` below (for a SCORER account)
+ * is belt-and-suspenders UX filtering, not the security boundary.
  *
- * A LIVE match takes the scorer straight to the live scoring screen (5.2) —
- * there's nothing to choose, they're already scoring. Otherwise, list any
- * SCHEDULED match(es) with a "Start Match" button.
+ * An ADMIN account is also allowed to score — every RLS policy and scoring
+ * RPC (start_match/start_next_game/undo_last_rally/complete_match/
+ * reopen_match) already lets is_admin() through unconditionally, with no
+ * scorer_id check. So for admin this page drops the scorer_id filter
+ * entirely and shows every LIVE/SCHEDULED match across all courts, since an
+ * admin isn't "assigned" to just one.
+ *
+ * A SCORER with a single LIVE match is taken straight to the live scoring
+ * screen (5.2) — there's nothing to choose, they're already scoring. Admin
+ * never auto-redirects like that (they could have several matches live at
+ * once across courts) — they always get the picker.
  */
 export default async function ScorerHomePage() {
   const supabase = await createClient();
@@ -22,34 +32,65 @@ export default async function ScorerHomePage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id")
+    .select("id, role")
     .eq("auth_user_id", user.id)
     .maybeSingle();
 
   if (!profile) redirect("/login");
 
-  const { data: matches } = await supabase
+  const isAdmin = profile.role === "ADMIN";
+
+  let query = supabase
     .from("matches")
     .select(
       "id, match_number, match_type, best_of, status, courts(name), tournaments(name), teams!teams_match_id_fkey(team_number, match_participants(players(name)))"
     )
-    .eq("scorer_id", profile.id)
     .in("status", ["LIVE", "SCHEDULED"])
-    .order("status"); // LIVE < SCHEDULED alphabetically — puts an in-progress match first
+    .order("status"); // LIVE < SCHEDULED alphabetically — puts in-progress matches first
 
-  const live = matches?.find((m) => m.status === "LIVE");
-  if (live) redirect(`/scorer/matches/${live.id}`);
+  if (!isAdmin) {
+    query = query.eq("scorer_id", profile.id);
+  }
 
+  const { data: matches } = await query;
+
+  if (!isAdmin) {
+    const live = matches?.find((m) => m.status === "LIVE");
+    if (live) redirect(`/scorer/matches/${live.id}`);
+  }
+
+  const live = isAdmin ? (matches?.filter((m) => m.status === "LIVE") ?? []) : [];
   const scheduled = matches?.filter((m) => m.status === "SCHEDULED") ?? [];
 
   return (
     <main className="mx-auto max-w-md px-4 py-8">
-      <h1 className="text-xl font-semibold text-neutral-900">Your matches</h1>
+      <h1 className="text-xl font-semibold text-neutral-900">
+        {isAdmin ? "All matches" : "Your matches"}
+      </h1>
 
-      {scheduled.length === 0 && (
+      {live.length === 0 && scheduled.length === 0 && (
         <p className="mt-6 text-center text-neutral-400">
-          No assigned match right now. Check back once an admin assigns you one.
+          {isAdmin
+            ? "No live or scheduled matches right now."
+            : "No assigned match right now. Check back once an admin assigns you one."}
         </p>
+      )}
+
+      {live.length > 0 && (
+        <div className="mt-6 space-y-3">
+          {live.map((m) => (
+            <Link
+              key={m.id}
+              href={`/scorer/matches/${m.id}`}
+              className="block rounded-xl border border-live-500/30 bg-live-500/5 p-4"
+            >
+              <LiveBadge />
+              <p className="mt-1 text-base font-medium text-neutral-900">
+                {m.tournaments?.name} · Match #{m.match_number} · {m.courts?.name ?? "No court"}
+              </p>
+            </Link>
+          ))}
+        </div>
       )}
 
       <div className="mt-6 space-y-3">
