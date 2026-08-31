@@ -342,17 +342,54 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
 
 ## Phase 5 — Scorer UI (highest priority UX)
 
-- [ ] **5.1 Scorer login + assigned court view** — mobile-first, shows assigned court/match only
-      (RLS-enforced, not just UI-filtered).
-- [ ] **5.2 Live scoring screen** — player-select buttons → WINNER/DROP/SPLIT (§23, §55), score
-      display, 1–2 tap flow, double-tap protection (§52), optimistic local update + server
-      confirm.
-- [ ] **5.3 Undo control** — always-visible, calls 4.3.
-- [ ] **5.4 Game/match completion flow** — end game, start next game (Bo3), complete match,
-      triggers 4.7, then locks the screen (read-only "match complete" state).
-- [ ] **5.5 Connection resilience** — connection-state indicator, retry-safe rally submission
-      (idempotency key from 4.1), in-memory match-state preservation across a dropped
-      connection.
+- [x] **5.1 Scorer login + assigned court view** — `src/app/scorer/page.tsx`. Queries
+      `matches` filtered to `scorer_id = <caller's profile>` and status LIVE/SCHEDULED — RLS
+      (`matches_scorer_select_assigned`) is what actually enforces this, the query filter is
+      belt-and-suspenders UX only. A LIVE match redirects straight to the live scoring screen
+      (nothing to choose, they're already scoring); SCHEDULED matches list with a
+      `StartMatchButton` (calls the `start_match` RPC from 4.8).
+- [x] **5.2 Live scoring screen** — `src/components/scorer/live-scoring-screen.tsx`, backed by
+      `src/app/scorer/actions.ts` (`recordRally`, a plain scorer-owned INSERT — RLS already
+      restricts it to the caller's own LIVE match/IN_PROGRESS game, no RPC needed here) and
+      `src/lib/validation/rally.ts`. Flow exactly per §23/§55: tap a player -> tap WINNING
+      SHOT/DROP (DROP resolves the opposing team automatically) -> next rally; SPLIT is a
+      separate always-available button (tap it -> tap which side won, since SPLIT has no player
+      to infer team from — 4.1's `winning_team_id` schema decision). §52 double-tap protection:
+      every action button disables while a request is in flight. §51 idempotent rally IDs: each
+      rally gets a client-generated `crypto.randomUUID()` up front, stored alongside its exact
+      payload; a retry reuses that same id/payload rather than minting a new one, so the
+      rallies table's own primary-key uniqueness — not application logic — is what prevents a
+      duplicate on retry. Optimistic score display: computed from a `{baseScore, bumped}` pair
+      recorded at submit time, naturally superseded (no `useEffect`/state-sync needed) the
+      moment the server's real score no longer matches that baseline.
+- [x] **5.3 Undo control** — always-visible while a game is in progress, calls the
+      `undo_last_rally` RPC (4.3) via `undoLastRally` in the same actions file.
+- [x] **5.4 Game/match completion flow** — derives "game complete, match undecided" vs "match
+      decided" client-side from the `games` list (games won per team vs `ceil(best_of/2)`) to
+      choose which prompt to show: "Start Game N" (`start_next_game`, 4.8) or "Complete Match"
+      (`complete_match`, 4.7) — the RPCs themselves remain the actual source of truth/validation
+      either way, this is just which button to offer. A COMPLETED (or CANCELLED) match renders
+      a read-only summary (per-game final scores) instead of the scoring UI — "locks the
+      screen" per spec, achieved by branching on `matches.status` rather than a separate lock
+      flag.
+      **Verified end-to-end** 2026-08-30: live-browser Playwright at a 390px mobile viewport,
+      logged in as a real scorer account — started an assigned SCHEDULED match, recorded a
+      WINNER, a DROP, and a SPLIT rally through the actual tap flow, undid the SPLIT, confirmed
+      every step's score against the database directly (not just the screenshot, which raced
+      `router.refresh()` a few times harmlessly), fast-forwarded to a decided Bo1 match and
+      confirmed the "Complete Match" prompt appears and works, and confirmed the completed
+      match's read-only summary. Cross-checked `complete_match`'s actual side effects
+      end-to-end through the real UI: both players' `player_ratings` matched hand-calculated
+      expected values exactly. No console errors. Build/lint/vitest pass. Test fixtures cleaned
+      up afterward (surfaced that `rallies.winning_team_id` needs its `teams` rows' rallies
+      deleted before a cascading tournament delete can reach them, since that FK is
+      `ON DELETE RESTRICT`, not `CASCADE` — documented here for the next cleanup).
+- [ ] **5.5 Connection resilience** — connection-state indicator, in-memory match-state
+      preservation across a dropped connection. Deliberately scoped out of 5.1-5.4 (same split
+      as Phase 4's two commits) — retry-safety and idempotency (the "don't create duplicate
+      rallies on retry" half of §51) are already in place via 5.2's client-generated rally IDs;
+      what's left is the network-awareness UI layer (offline indicator, queuing/replay while
+      disconnected, resuming in-memory state after a reconnect).
 
 ## Phase 6 — Group Standings, Qualification, Temporary Teams
 
