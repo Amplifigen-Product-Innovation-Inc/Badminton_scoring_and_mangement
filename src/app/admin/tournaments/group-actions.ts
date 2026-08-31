@@ -76,3 +76,21 @@ export async function removePlayerFromGroup(
   revalidatePath(`/admin/tournaments/${tournamentId}`);
   return { status: "ok" };
 }
+
+/**
+ * §15/§28 — persists the group's top 2 into group_qualifications via
+ * compute_group_qualification (0007_group_standings.sql). Leaves any
+ * admin-overridden rank untouched (the RPC's own job, not this wrapper's).
+ */
+export async function computeGroupQualification(
+  groupId: string,
+  tournamentId: string
+): Promise<GroupActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("compute_group_qualification", { p_group_id: groupId });
+
+  if (error) return { status: "error", message: error.message };
+
+  revalidatePath(`/admin/tournaments/${tournamentId}`);
+  return { status: "ok" };
+}

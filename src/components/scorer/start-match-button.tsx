@@ -3,34 +3,37 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { startMatch } from "@/app/scorer/actions";
+import { Button } from "@/components/ui/button";
+import { ErrorState } from "@/components/ui/error-state";
 
 export function StartMatchButton({ matchId }: { matchId: string }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
+  // §33 — don't surface the raw Supabase/Postgres error to the scorer.
+  const [failed, setFailed] = useState(false);
 
   function handleClick() {
-    setError(null);
+    setFailed(false);
     startTransition(async () => {
       const res = await startMatch(matchId);
       if (res.status === "ok") {
         router.push(`/scorer/matches/${matchId}`);
       } else {
-        setError(res.message);
+        setFailed(true);
       }
     });
   }
 
   return (
     <>
-      <button
-        onClick={handleClick}
-        disabled={isPending}
-        className="mt-3 w-full rounded-lg bg-neutral-900 px-4 py-3 text-base font-medium text-white disabled:opacity-50"
-      >
-        {isPending ? "Starting…" : "Start Match"}
-      </button>
-      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+      <Button onClick={handleClick} disabled={isPending} size="lg" className="w-full">
+        {isPending ? "Starting…" : "Start match"}
+      </Button>
+      {failed && (
+        <div className="mt-2">
+          <ErrorState message="We couldn't start the match. Try again." onRetry={handleClick} />
+        </div>
+      )}
     </>
   );
 }

@@ -16,8 +16,8 @@ type SearchResult = { id: string; name: string };
 
 const STATUS_STYLES: Record<string, string> = {
   AVAILABLE: "bg-neutral-100 text-neutral-600",
-  ASSIGNED: "bg-blue-50 text-blue-700",
-  LIVE: "bg-emerald-50 text-emerald-700",
+  ASSIGNED: "bg-brand-50 text-brand-700",
+  LIVE: "bg-success-50 text-success-700",
   COMPLETED: "bg-neutral-100 text-neutral-500",
 };
 
@@ -33,7 +33,7 @@ export function TournamentCourtsManager({
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState(false);
 
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -67,12 +67,12 @@ export function TournamentCourtsManager({
   }
 
   function handleAddSelected() {
-    setError(null);
+    setError(false);
     const ids = Array.from(selected);
     startTransition(async () => {
       const res = await addCourtsToTournament(tournamentId, ids);
       if (res.status === "error") {
-        setError(res.message);
+        setError(true);
         return;
       }
       setSelected(new Set());
@@ -82,10 +82,10 @@ export function TournamentCourtsManager({
   }
 
   function handleRemove(courtId: string) {
-    setError(null);
+    setError(false);
     startTransition(async () => {
       const res = await removeCourtFromTournament(tournamentId, courtId);
-      if (res.status === "error") setError(res.message);
+      if (res.status === "error") setError(true);
       else router.refresh();
     });
   }
@@ -93,14 +93,14 @@ export function TournamentCourtsManager({
   function handleStatusChange(courtId: string, status: string) {
     startTransition(async () => {
       const res = await updateTournamentCourtStatus(tournamentId, courtId, status);
-      if (res.status === "error") setError(res.message);
+      if (res.status === "error") setError(true);
       else router.refresh();
     });
   }
 
   function handleAddNewSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setError(null);
+    setError(false);
     const formData = new FormData(e.currentTarget);
     const input = { name: formData.get("name") };
 
@@ -111,13 +111,13 @@ export function TournamentCourtsManager({
         setShowAddNew(false);
         router.refresh();
       } else {
-        setError(res.message);
+        setError(true);
       }
     });
   }
 
   return (
-    <div className="rounded-xl border border-neutral-200 bg-white p-6">
+    <div className="rounded-xl border border-surface-border bg-surface p-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-sm font-semibold text-neutral-900">
           Courts <span className="font-normal text-neutral-400">({courts.length})</span>
@@ -134,18 +134,18 @@ export function TournamentCourtsManager({
         <form
           ref={addNewFormRef}
           onSubmit={handleAddNewSubmit}
-          className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-neutral-200 p-3"
+          className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-surface-border p-3"
         >
           <input
             name="name"
             required
             placeholder="Court name (e.g. Court 3)"
-            className="min-w-[140px] flex-1 rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900"
+            className="min-w-[140px] flex-1 rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand-500"
           />
           <button
             type="submit"
             disabled={isPending}
-            className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+            className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50 disabled:bg-neutral-300"
           >
             {isPending ? "Adding…" : "Add & Attach"}
           </button>
@@ -174,7 +174,7 @@ export function TournamentCourtsManager({
               </select>
               <button
                 onClick={() => handleRemove(c.id)}
-                className="text-sm text-red-500 hover:text-red-700"
+                className="text-sm text-error-500 hover:text-error-700"
               >
                 Remove
               </button>
@@ -191,7 +191,7 @@ export function TournamentCourtsManager({
           value={query}
           onChange={(e) => handleQueryChange(e.target.value)}
           placeholder="Search by name…"
-          className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900"
+          className="w-full rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand-500"
         />
 
         {(searching || results.length > 0) && (
@@ -201,7 +201,7 @@ export function TournamentCourtsManager({
               results.map((c) => (
                 <label
                   key={c.id}
-                  className="flex cursor-pointer items-center gap-3 border-b border-neutral-50 px-3 py-2 last:border-0 hover:bg-neutral-50"
+                  className="flex cursor-pointer items-center gap-3 border-b border-neutral-100 px-3 py-2 last:border-0 hover:bg-neutral-50"
                 >
                   <input
                     type="checkbox"
@@ -219,14 +219,14 @@ export function TournamentCourtsManager({
           <button
             onClick={handleAddSelected}
             disabled={isPending}
-            className="mt-3 rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+            className="mt-3 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50 disabled:bg-neutral-300"
           >
             {isPending ? "Adding…" : `Add Selected (${selected.size})`}
           </button>
         )}
       </div>
 
-      {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+      {error && <p className="mt-3 text-sm text-error-500">Something went wrong saving that change. Try again.</p>}
     </div>
   );
 }

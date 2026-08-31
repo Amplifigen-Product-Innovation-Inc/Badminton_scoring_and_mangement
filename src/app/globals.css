@@ -1,26 +1,185 @@
 @import "tailwindcss";
 
+/*
+ * Design tokens — Stage 1 of the market-ready design uplift
+ * (see /Users/navsingh/.claude/plans/lovely-booping-sloth.md).
+ *
+ * Identity: "court green" as the brand primary — deliberately not a generic
+ * SaaS blue (§38/§47). Category colors are always paired with a text label
+ * in components; never used as the sole identifier (§26/§38/§42).
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Brand — court green */
+  --color-brand-50: #f0faf4;
+  --color-brand-100: #dcf3e4;
+  --color-brand-200: #b8e6c9;
+  --color-brand-300: #86d1a5;
+  --color-brand-400: #4fb47d;
+  --color-brand-500: #2c9760;
+  --color-brand-600: #1c7a4c;
+  --color-brand-700: #17613e;
+  --color-brand-800: #144e34;
+  --color-brand-900: #11402c;
+
+  /* Neutral scale */
+  --color-neutral-0: #ffffff;
+  --color-neutral-50: #f8fafa;
+  --color-neutral-100: #f1f4f3;
+  --color-neutral-200: #e2e8e6;
+  --color-neutral-300: #cbd5d2;
+  --color-neutral-400: #9aa8a3;
+  --color-neutral-500: #6b7a75;
+  --color-neutral-600: #4d5a56;
+  --color-neutral-700: #384340;
+  --color-neutral-800: #252e2b;
+  --color-neutral-900: #161e1c;
+  --color-neutral-950: #0c1211;
+
+  /* Semantic */
+  --color-success-50: #f0faf4;
+  --color-success-500: #2c9760;
+  --color-success-700: #17613e;
+  --color-warning-50: #fffaeb;
+  --color-warning-500: #d97a06;
+  --color-warning-700: #9a5309;
+  --color-error-50: #fef2f2;
+  --color-error-500: #dc3545;
+  --color-error-700: #a3222d;
+  --color-live-500: #e8412c;
+  --color-live-600: #cc2f1c;
+
+  /* Category identity — colorblind-conscious, always paired with a label */
+  --color-cat-beginner: #2f6fed;
+  --color-cat-beginner-bg: #eaf1ff;
+  --color-cat-intermediate: #7c4fe0;
+  --color-cat-intermediate-bg: #f2edfd;
+  --color-cat-advanced: #d97a06;
+  --color-cat-advanced-bg: #fff4e2;
+  --color-cat-open: #4d5a56;
+  --color-cat-open-bg: #f1f4f3;
+
+  /* Surfaces */
+  --background: var(--color-neutral-50);
+  --foreground: var(--color-neutral-900);
+  --surface: var(--color-neutral-0);
+  --surface-border: var(--color-neutral-200);
+
+  /* Radius / shadow / motion scale — single source, don't hardcode per-screen */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.625rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.5rem;
+  --shadow-sm: 0 1px 2px rgba(12, 18, 17, 0.06);
+  --shadow-md: 0 2px 8px rgba(12, 18, 17, 0.08);
+  --shadow-lg: 0 8px 24px rgba(12, 18, 17, 0.12);
+  --duration-fast: 150ms;
+  --duration-base: 220ms;
+  --touch-target: 2.75rem; /* 44px minimum, §42 */
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --background: var(--color-neutral-950);
+    --foreground: var(--color-neutral-50);
+    --surface: var(--color-neutral-900);
+    --surface-border: var(--color-neutral-700);
+  }
+}
+
+:root[data-theme="dark"] {
+  --background: var(--color-neutral-950);
+  --foreground: var(--color-neutral-50);
+  --surface: var(--color-neutral-900);
+  --surface-border: var(--color-neutral-700);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-border: var(--surface-border);
+
+  --color-brand-50: var(--color-brand-50);
+  --color-brand-100: var(--color-brand-100);
+  --color-brand-200: var(--color-brand-200);
+  --color-brand-300: var(--color-brand-300);
+  --color-brand-400: var(--color-brand-400);
+  --color-brand-500: var(--color-brand-500);
+  --color-brand-600: var(--color-brand-600);
+  --color-brand-700: var(--color-brand-700);
+  --color-brand-800: var(--color-brand-800);
+  --color-brand-900: var(--color-brand-900);
+
+  --color-success-50: var(--color-success-50);
+  --color-success-500: var(--color-success-500);
+  --color-success-700: var(--color-success-700);
+  --color-warning-50: var(--color-warning-50);
+  --color-warning-500: var(--color-warning-500);
+  --color-warning-700: var(--color-warning-700);
+  --color-error-50: var(--color-error-50);
+  --color-error-500: var(--color-error-500);
+  --color-error-700: var(--color-error-700);
+  --color-live-500: var(--color-live-500);
+  --color-live-600: var(--color-live-600);
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+/* Numeric/score style — tabular figures so digits don't jitter width as they
+   change (§13/§39). Applied via the `font-score` utility class. */
+.font-score {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  letter-spacing: -0.02em;
+  font-weight: 700;
+}
+
+/* Score-change animation primitive (§13) — under 250ms, never blocks input. */
+@keyframes score-bump {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.12);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.animate-score-bump {
+  animation: score-bump var(--duration-base) ease-out;
+}
+
+/* Live pulse — paired with an "● LIVE" text label wherever used, never color-only. */
+@keyframes live-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+.animate-live-pulse {
+  animation: live-pulse 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-score-bump,
+  .animate-live-pulse {
+    animation: none;
+  }
+}
+
+/* Visible focus ring, color-independent (§42) */
+:focus-visible {
+  outline: 2px solid var(--color-brand-500);
+  outline-offset: 2px;
 }

@@ -20,7 +20,7 @@ type Stage = {
 
 const STATUS_STYLES: Record<string, string> = {
   PENDING: "bg-neutral-100 text-neutral-600",
-  ACTIVE: "bg-emerald-50 text-emerald-700",
+  ACTIVE: "bg-success-50 text-success-700",
   COMPLETED: "bg-neutral-100 text-neutral-500",
 };
 
@@ -35,12 +35,12 @@ export function StagesManager({
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
   const [isPending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
   function handleAdd(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setError(null);
+    setError(false);
     const formData = new FormData(e.currentTarget);
     const input = { name: formData.get("name"), stage_type: formData.get("stage_type") };
 
@@ -50,7 +50,7 @@ export function StagesManager({
         formRef.current?.reset();
         router.refresh();
       } else {
-        setError(res.message);
+        setError(true);
       }
     });
   }
@@ -58,7 +58,7 @@ export function StagesManager({
   function handleMove(stageId: string, direction: "up" | "down") {
     startTransition(async () => {
       const res = await moveStage(stageId, tournamentId, direction);
-      if (res.status === "error") setError(res.message);
+      if (res.status === "error") setError(true);
       else router.refresh();
     });
   }
@@ -67,14 +67,14 @@ export function StagesManager({
     if (!confirm(`Delete stage "${stage.name}"? This also removes its groups.`)) return;
     startTransition(async () => {
       const res = await deleteStage(stage.id, tournamentId);
-      if (res.status === "error") setError(res.message);
+      if (res.status === "error") setError(true);
       else router.refresh();
     });
   }
 
   function handleEditSubmit(stage: Stage, e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setError(null);
+    setError(false);
     const formData = new FormData(e.currentTarget);
     const input = {
       name: formData.get("name"),
@@ -88,13 +88,13 @@ export function StagesManager({
         setEditingId(null);
         router.refresh();
       } else {
-        setError(res.message);
+        setError(true);
       }
     });
   }
 
   return (
-    <div className="rounded-xl border border-neutral-200 bg-white p-6">
+    <div className="rounded-xl border border-surface-border bg-surface p-6">
       <h2 className="text-sm font-semibold text-neutral-900">Stages</h2>
 
       <div className="mt-4 space-y-2">
@@ -107,18 +107,18 @@ export function StagesManager({
             <form
               key={stage.id}
               onSubmit={(e) => handleEditSubmit(stage, e)}
-              className="flex flex-wrap items-center gap-2 rounded-lg border border-neutral-200 p-3"
+              className="flex flex-wrap items-center gap-2 rounded-lg border border-surface-border p-3"
             >
               <input
                 name="name"
                 defaultValue={stage.name}
                 required
-                className="min-w-[160px] flex-1 rounded-lg border border-neutral-300 px-2 py-1.5 text-sm outline-none focus:border-neutral-900"
+                className="min-w-[160px] flex-1 rounded-lg border border-surface-border bg-surface px-2 py-1.5 text-sm outline-none focus:border-brand-500"
               />
               <select
                 name="stage_type"
                 defaultValue={stage.stage_type}
-                className="rounded-lg border border-neutral-300 px-2 py-1.5 text-sm outline-none focus:border-neutral-900"
+                className="rounded-lg border border-surface-border bg-surface px-2 py-1.5 text-sm outline-none focus:border-brand-500"
               >
                 {stageTypeValues.map((t) => (
                   <option key={t} value={t}>
@@ -129,7 +129,7 @@ export function StagesManager({
               <select
                 name="status"
                 defaultValue={stage.status}
-                className="rounded-lg border border-neutral-300 px-2 py-1.5 text-sm outline-none focus:border-neutral-900"
+                className="rounded-lg border border-surface-border bg-surface px-2 py-1.5 text-sm outline-none focus:border-brand-500"
               >
                 {stageStatusValues.map((s) => (
                   <option key={s} value={s}>
@@ -140,7 +140,7 @@ export function StagesManager({
               <button
                 type="submit"
                 disabled={isPending}
-                className="rounded-lg bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+                className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50 disabled:bg-neutral-300"
               >
                 Save
               </button>
@@ -197,7 +197,7 @@ export function StagesManager({
                 </button>
                 <button
                   onClick={() => handleDelete(stage)}
-                  className="text-sm text-red-500 hover:text-red-700"
+                  className="text-sm text-error-500 hover:text-error-700"
                 >
                   Delete
                 </button>
@@ -212,12 +212,12 @@ export function StagesManager({
           name="name"
           required
           placeholder="Stage name (e.g. Group Stage)"
-          className="min-w-[180px] flex-1 rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900"
+          className="min-w-[180px] flex-1 rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand-500"
         />
         <select
           name="stage_type"
           defaultValue="GROUP"
-          className="rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900"
+          className="rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand-500"
         >
           {stageTypeValues.map((t) => (
             <option key={t} value={t}>
@@ -228,13 +228,13 @@ export function StagesManager({
         <button
           type="submit"
           disabled={isPending}
-          className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+          className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50 disabled:bg-neutral-300"
         >
           {isPending ? "Adding…" : "+ Add Stage"}
         </button>
       </form>
 
-      {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+      {error && <p className="mt-3 text-sm text-error-500">Something went wrong saving that change. Try again.</p>}
     </div>
   );
 }

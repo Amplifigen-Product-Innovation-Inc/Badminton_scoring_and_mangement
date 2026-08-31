@@ -2,11 +2,21 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { cancelMatch, createMatch, deleteMatch } from "@/app/admin/tournaments/match-actions";
+import {
+  cancelMatch,
+  createMatch,
+  deleteMatch,
+  reopenMatch,
+} from "@/app/admin/tournaments/match-actions";
 import { bestOfValues, matchTypeValues } from "@/lib/validation/match";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge, CategoryBadge, LiveBadge } from "@/components/ui/badge";
+import { ErrorState } from "@/components/ui/error-state";
+import { EmptyState } from "@/components/ui/empty-state";
 
 type RosterPlayer = { id: string; name: string };
-type Group = { id: string; name: string; players: RosterPlayer[] };
+type Group = { id: string; name: string; category?: string | null; players: RosterPlayer[] };
 type Stage = { id: string; name: string; stage_type: string; groups: Group[] };
 type Court = { id: string; name: string };
 type Scorer = { id: string; label: string };
@@ -20,13 +30,6 @@ type Match = {
   courtName: string | null;
   scorerLabel: string | null;
   teams: MatchTeam[];
-};
-
-const STATUS_STYLES: Record<string, string> = {
-  SCHEDULED: "bg-neutral-100 text-neutral-600",
-  LIVE: "bg-emerald-50 text-emerald-700",
-  COMPLETED: "bg-neutral-100 text-neutral-500",
-  CANCELLED: "bg-red-50 text-red-700",
 };
 
 /** §19/§20 match creation: pick a stage (+ optional group), format, court,
@@ -79,6 +82,28 @@ export function MatchesManager({
   }, [groupId, selectedStage, roster]);
 
   const requiredPerTeam = matchType === "SINGLES" ? 1 : 2;
+
+  // §30 — cosmetic only: a match is shown as "cross-category" when its two
+  // teams draw from groups with different categories. Derived client-side
+  // from the stage/group data already loaded here; nothing is persisted.
+  const playerCategory = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const stage of stages) {
+      for (const group of stage.groups) {
+        if (!group.category) continue;
+        for (const p of group.players) map.set(p.id, group.category);
+      }
+    }
+    return map;
+  }, [stages]);
+
+  function teamCategory(team: MatchTeam) {
+    for (const p of team.players) {
+      const cat = playerCategory.get(p.id);
+      if (cat) return cat;
+    }
+    return null;
+  }
 
   function toggle(set: Set<string>, setter: (s: Set<string>) => void, id: string) {
     const next = new Set(set);
@@ -135,50 +160,88 @@ export function MatchesManager({
     });
   }
 
+  function handleReopen(match: Match) {
+    if (
+      !confirm(
+        `Reopen match #${match.matchNumber}? This reverses its rating and stats effects and sets it back to LIVE for correction.`
+      )
+    ) {
+      return;
+    }
+    startTransition(async () => {
+      const res = await reopenMatch(match.id, tournamentId);
+      if (res.status === "error") setError(res.message);
+      else router.refresh();
+    });
+  }
+
   if (stages.length === 0) {
     return (
-      <div className="rounded-xl border border-neutral-200 bg-white p-6">
+      <Card padding="lg">
         <h2 className="text-sm font-semibold text-neutral-900">Matches</h2>
         <p className="mt-2 text-sm text-neutral-400">Add a stage first before creating matches.</p>
-      </div>
+      </Card>
     );
   }
 
   return (
-    <div className="rounded-xl border border-neutral-200 bg-white p-6">
+    <Card padding="lg">
       <h2 className="text-sm font-semibold text-neutral-900">
         Matches <span className="font-normal text-neutral-400">({matches.length})</span>
       </h2>
 
       <div className="mt-4 space-y-2">
         {matches.length === 0 && (
-          <p className="text-sm text-neutral-400">No matches yet — create the first one below.</p>
+          <EmptyState
+            title="No matches yet"
+            description="Create the first match below — pick a stage, the teams, and (optionally) a court and scorer."
+          />
         )}
-        {matches.map((m) => (
+        {matches.map((m) => {
+          const sortedTeams = [...m.teams].sort((a, b) => a.teamNumber - b.teamNumber);
+          const categories = sortedTeams.map(teamCategory);
+          const isCrossCategory =
+            categories[0] && categories[1] && categories[0] !== categories[1];
+
+          return (
           <div
             key={m.id}
-            className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-neutral-100 p-3"
+            className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-surface-border p-3"
           >
             <div>
               <p className="text-sm font-medium text-neutral-900">
-                #{m.matchNumber} · {m.matchType} · Bo{m.bestOf}
+                #{m.matchNumber} · {m.matchType} · Best of {m.bestOf}
+                {isCrossCategory && (
+                  <span className="ml-2">
+                    <Badge tone="brand">Cross-category</Badge>
+                  </span>
+                )}
               </p>
-              <p className="text-xs text-neutral-500">
-                {m.teams
-                  .sort((a, b) => a.teamNumber - b.teamNumber)
-                  .map((t) => t.players.map((p) => p.name).join(" / "))
-                  .join(" vs ")}
+              <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-neutral-500">
+                {sortedTeams.map((t, i) => (
+                  <span key={t.teamNumber} className="inline-flex items-center gap-1.5">
+                    {i > 0 && <span className="text-neutral-300">vs</span>}
+                    {t.players.map((p) => p.name).join(" / ")}
+                    {categories[i] && <CategoryBadge category={categories[i]!} />}
+                  </span>
+                ))}
               </p>
               <p className="text-xs text-neutral-400">
                 {m.courtName ?? "No court"} · {m.scorerLabel ?? "No scorer assigned"}
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <span
-                className={`rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_STYLES[m.status] ?? "bg-neutral-100 text-neutral-600"}`}
-              >
-                {m.status}
-              </span>
+              {m.status === "LIVE" ? (
+                <LiveBadge />
+              ) : (
+                <Badge
+                  tone={
+                    m.status === "COMPLETED" ? "success" : m.status === "CANCELLED" ? "error" : "neutral"
+                  }
+                >
+                  {m.status.charAt(0) + m.status.slice(1).toLowerCase()}
+                </Badge>
+              )}
               {m.status === "SCHEDULED" && (
                 <>
                   <button
@@ -189,15 +252,25 @@ export function MatchesManager({
                   </button>
                   <button
                     onClick={() => handleDelete(m)}
-                    className="text-sm text-red-500 hover:text-red-700"
+                    className="text-sm text-error-500 hover:text-error-700"
                   >
                     Delete
                   </button>
                 </>
               )}
+              {m.status === "COMPLETED" && (
+                <button
+                  onClick={() => handleReopen(m)}
+                  disabled={isPending}
+                  className="text-sm text-neutral-500 hover:text-neutral-900 disabled:opacity-50"
+                >
+                  Reopen
+                </button>
+              )}
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
 
       <form onSubmit={handleCreate} className="mt-5 space-y-4 border-t border-neutral-100 pt-4">
@@ -211,7 +284,7 @@ export function MatchesManager({
                 setGroupId("");
                 resetTeams();
               }}
-              className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900"
+              className="w-full rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand-500"
             >
               {stages.map((s) => (
                 <option key={s.id} value={s.id}>
@@ -232,7 +305,7 @@ export function MatchesManager({
                   setGroupId(e.target.value);
                   resetTeams();
                 }}
-                className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900"
+                className="w-full rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand-500"
               >
                 <option value="">No group</option>
                 {selectedStage.groups.map((g) => (
@@ -254,7 +327,7 @@ export function MatchesManager({
                 setMatchType(e.target.value as (typeof matchTypeValues)[number]);
                 resetTeams();
               }}
-              className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900"
+              className="w-full rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand-500"
             >
               {matchTypeValues.map((t) => (
                 <option key={t} value={t}>
@@ -268,7 +341,7 @@ export function MatchesManager({
             <select
               value={bestOf}
               onChange={(e) => setBestOf(Number(e.target.value) as (typeof bestOfValues)[number])}
-              className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900"
+              className="w-full rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand-500"
             >
               {bestOfValues.map((b) => (
                 <option key={b} value={b}>
@@ -287,7 +360,7 @@ export function MatchesManager({
             <select
               value={courtId}
               onChange={(e) => setCourtId(e.target.value)}
-              className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900"
+              className="w-full rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand-500"
             >
               <option value="">Unassigned</option>
               {courts.map((c) => (
@@ -304,7 +377,7 @@ export function MatchesManager({
             <select
               value={scorerId}
               onChange={(e) => setScorerId(e.target.value)}
-              className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900"
+              className="w-full rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand-500"
             >
               <option value="">Unassigned</option>
               {scorers.map((s) => (
@@ -321,7 +394,7 @@ export function MatchesManager({
             <label className="mb-1 block text-xs font-medium text-neutral-500">
               Team 1 ({requiredPerTeam} player{requiredPerTeam > 1 ? "s" : ""})
             </label>
-            <div className="max-h-40 overflow-y-auto rounded-lg border border-neutral-200">
+            <div className="max-h-40 overflow-y-auto rounded-lg border border-surface-border">
               {candidatePlayers.length === 0 && (
                 <p className="px-3 py-2 text-sm text-neutral-400">No players available.</p>
               )}
@@ -346,7 +419,7 @@ export function MatchesManager({
             <label className="mb-1 block text-xs font-medium text-neutral-500">
               Team 2 ({requiredPerTeam} player{requiredPerTeam > 1 ? "s" : ""})
             </label>
-            <div className="max-h-40 overflow-y-auto rounded-lg border border-neutral-200">
+            <div className="max-h-40 overflow-y-auto rounded-lg border border-surface-border">
               {candidatePlayers.length === 0 && (
                 <p className="px-3 py-2 text-sm text-neutral-400">No players available.</p>
               )}
@@ -369,16 +442,16 @@ export function MatchesManager({
           </div>
         </div>
 
-        <button
-          type="submit"
-          disabled={isPending}
-          className="w-full rounded-lg bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50 sm:w-auto"
-        >
+        <Button type="submit" disabled={isPending} className="w-full sm:w-auto">
           {isPending ? "Creating…" : "+ Create Match"}
-        </button>
+        </Button>
       </form>
 
-      {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
-    </div>
+      {error && (
+        <div className="mt-3">
+          <ErrorState message="We couldn't create that match. Try again." />
+        </div>
+      )}
+    </Card>
   );
 }

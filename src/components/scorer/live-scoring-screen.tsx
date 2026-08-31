@@ -9,6 +9,11 @@ import {
   undoLastRally,
 } from "@/app/scorer/actions";
 import { StartMatchButton } from "@/components/scorer/start-match-button";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { LiveBadge, Badge } from "@/components/ui/badge";
+import { ScoreDisplay } from "@/components/ui/score-display";
+import { ErrorState } from "@/components/ui/error-state";
 
 type Player = { id: string; name: string };
 type Team = { id: string; players: Player[] };
@@ -33,6 +38,12 @@ type Selection = { kind: "player"; player: Player; team: Team } | { kind: "split
  * generated id up front; a retry of a failed submission reuses that same
  * id/payload rather than minting a new one, so the DB's own primary-key
  * uniqueness is what prevents a duplicate rally on retry.
+ *
+ * Visual redesign per the market-ready design plan (§8-17): score is the
+ * dominant element, primary controls sit in the lower/thumb-reach half of
+ * the screen (§11), deuce/final-point are called out so the scorer never
+ * has to remember the rules (§17), and errors/undo route through the
+ * shared design-system components.
  */
 export function LiveScoringScreen({
   matchId,
@@ -60,7 +71,11 @@ export function LiveScoringScreen({
   const router = useRouter();
   const [selection, setSelection] = useState<Selection>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // §33 — track only which action failed, never the raw Supabase/Postgres
+  // message; the copy shown per action is a fixed, human string below.
+  const [errorAction, setErrorAction] = useState<"rally" | "undo" | "nextGame" | "complete" | null>(
+    null
+  );
   // Records the score this optimistic bump was computed FROM, alongside
   // the bumped values — so it's naturally superseded (no effect/sync
   // needed) the moment router.refresh() delivers a currentGame whose real
@@ -81,35 +96,61 @@ export function LiveScoringScreen({
 
   if (status === "SCHEDULED") {
     return (
-      <main className="mx-auto max-w-md px-4 py-8">
-        <h1 className="text-lg font-semibold text-neutral-900">
-          Match #{matchNumber} · {matchType} · Bo{bestOf}
+      <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-4 py-8">
+        <p className="text-xs font-medium uppercase tracking-wide text-neutral-400">
+          {tournamentName}
+        </p>
+        <h1 className="mt-1 text-xl font-semibold text-neutral-900">
+          Match #{matchNumber} · {matchType} · Best of {bestOf}
         </h1>
         <p className="mt-2 text-neutral-500">Not started yet.</p>
-        <StartMatchButton matchId={matchId} />
+        <div className="mt-6">
+          <StartMatchButton matchId={matchId} />
+        </div>
       </main>
     );
   }
 
   if (status === "COMPLETED" || status === "CANCELLED") {
+    const team1Wins = games.filter(
+      (g) => g.status === "COMPLETED" && g.winner_team_id === team1.id
+    ).length;
+    const team2Wins = games.filter(
+      (g) => g.status === "COMPLETED" && g.winner_team_id === team2.id
+    ).length;
+    const winner = status === "COMPLETED" ? (team1Wins > team2Wins ? team1 : team2) : null;
+
     return (
       <main className="mx-auto max-w-md px-4 py-8">
-        <div className="rounded-xl bg-neutral-900 px-4 py-3 text-center text-white">
-          <p className="text-sm font-medium">
-            {status === "COMPLETED" ? "Match complete" : "Match cancelled"}
-          </p>
-        </div>
-        <h1 className="mt-4 text-lg font-semibold text-neutral-900">
-          {teamLabel(team1)} <span className="text-neutral-400">vs</span> {teamLabel(team2)}
-        </h1>
+        {status === "COMPLETED" ? (
+          <Card className="border-brand-200 bg-brand-50 text-center" padding="lg">
+            <p className="text-xs font-semibold uppercase tracking-wide text-brand-700">
+              Match complete
+            </p>
+            <p className="mt-3 text-2xl font-bold text-neutral-900">{teamLabel(team1)}</p>
+            <p className="font-score my-1 text-4xl text-neutral-900">
+              {team1Wins} – {team2Wins}
+            </p>
+            <p className="text-2xl font-bold text-neutral-900">{teamLabel(team2)}</p>
+            {winner && (
+              <p className="mt-4 text-sm font-semibold text-brand-700">
+                Winner: {teamLabel(winner)}
+              </p>
+            )}
+          </Card>
+        ) : (
+          <Card className="bg-neutral-100 text-center" padding="lg">
+            <p className="text-sm font-medium text-neutral-600">Match cancelled</p>
+          </Card>
+        )}
         <div className="mt-4 space-y-2">
           {games.map((g) => (
             <div
               key={g.id}
-              className="flex items-center justify-between rounded-lg border border-neutral-200 px-4 py-3"
+              className="flex items-center justify-between rounded-lg border border-surface-border px-4 py-3"
             >
               <span className="text-sm text-neutral-500">Game {g.game_number}</span>
-              <span className="text-base font-semibold text-neutral-900">
+              <span className="font-score text-base text-neutral-900">
                 {g.team_1_score} – {g.team_2_score}
               </span>
             </div>
@@ -142,8 +183,15 @@ export function LiveScoringScreen({
   const score1 = optimisticIsCurrent ? optimistic.team1 : currentGame.team_1_score;
   const score2 = optimisticIsCurrent ? optimistic.team2 : currentGame.team_2_score;
 
+  // §17 — the scorer never has to remember the rules. Standard badminton:
+  // deuce (win-by-2) once both sides reach 20, decided outright at 30 —
+  // the last point before that cap is the "final point" call-out.
+  const rallyPoint = Math.max(score1, score2) + 1;
+  const isDeuce = score1 >= 20 && score2 >= 20 && Math.abs(score1 - score2) < 2 && rallyPoint < 30;
+  const isFinalPoint = score1 === 29 && score2 === 29;
+
   function submitRally(playerId: string | null, eventType: "WINNER" | "DROP" | "SPLIT", winningTeamId: string) {
-    setError(null);
+    setErrorAction(null);
     setSelection(null);
 
     const id = crypto.randomUUID();
@@ -174,7 +222,7 @@ export function LiveScoringScreen({
       if (res.status === "ok") {
         router.refresh();
       } else {
-        setError(res.message);
+        setErrorAction("rally");
         setOptimistic(null);
       }
     });
@@ -182,88 +230,119 @@ export function LiveScoringScreen({
 
   function retrySubmission() {
     if (!pendingSubmission.current) return;
-    setError(null);
+    setErrorAction(null);
     doSubmit(pendingSubmission.current.args);
   }
 
   function handleUndo() {
-    setError(null);
+    setErrorAction(null);
     setIsSubmitting(true);
     undoLastRally(matchId, currentGame.id).then((res) => {
       setIsSubmitting(false);
       if (res.status === "ok") router.refresh();
-      else setError(res.message);
+      else setErrorAction("undo");
     });
   }
 
   function handleStartNextGame() {
-    setError(null);
+    setErrorAction(null);
     setIsSubmitting(true);
     startNextGame(matchId).then((res) => {
       setIsSubmitting(false);
       if (res.status === "ok") router.refresh();
-      else setError(res.message);
+      else setErrorAction("nextGame");
     });
   }
 
   function handleCompleteMatch() {
-    setError(null);
+    setErrorAction(null);
     setIsSubmitting(true);
     completeMatch(matchId).then((res) => {
       setIsSubmitting(false);
       if (res.status === "ok") router.push("/scorer");
-      else setError(res.message);
+      else setErrorAction("complete");
     });
   }
 
+  const ERROR_COPY: Record<
+    NonNullable<typeof errorAction>,
+    { message: string; reassurance?: string }
+  > = {
+    rally: {
+      message: "We couldn't save that rally.",
+      reassurance: "Your current score is still safe — nothing was lost.",
+    },
+    undo: { message: "We couldn't undo that rally. Try again." },
+    nextGame: { message: "We couldn't start the next game. Try again." },
+    complete: {
+      message: "We couldn't complete the match.",
+      reassurance: "The final score is saved — try again to finish up.",
+    },
+  };
+
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col px-4 py-6">
-      <header className="text-center">
-        <p className="text-xs text-neutral-400">
-          {tournamentName} · {courtName ?? "No court"}
-        </p>
-        <p className="mt-0.5 text-xs text-neutral-400">
-          Game {currentGame.game_number} of {bestOf} · {matchType}
-        </p>
+    <main className="mx-auto flex min-h-screen max-w-md flex-col px-4 py-5">
+      <header className="flex items-center justify-between">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wide text-neutral-400">
+            {courtName ?? "No court"} · {tournamentName}
+          </p>
+          <p className="mt-0.5 text-xs text-neutral-400">
+            Game {currentGame.game_number} of {bestOf} · {matchType}
+          </p>
+        </div>
+        {gameInProgress && <LiveBadge />}
       </header>
 
+      {/* Score — the dominant element on screen (§9/§39) */}
       <div className="mt-4 grid grid-cols-2 gap-3">
-        <div className="rounded-xl border border-neutral-200 bg-white p-4 text-center">
-          <p className="truncate text-sm font-medium text-neutral-600">{teamLabel(team1)}</p>
-          <p className="mt-1 text-4xl font-bold text-neutral-900">{score1}</p>
-        </div>
-        <div className="rounded-xl border border-neutral-200 bg-white p-4 text-center">
-          <p className="truncate text-sm font-medium text-neutral-600">{teamLabel(team2)}</p>
-          <p className="mt-1 text-4xl font-bold text-neutral-900">{score2}</p>
-        </div>
+        <Card className="text-center" padding="lg">
+          <p className="truncate text-sm font-semibold text-neutral-600">{teamLabel(team1)}</p>
+          <ScoreDisplay value={score1} size="xl" className="mt-1 block text-neutral-900" />
+        </Card>
+        <Card className="text-center" padding="lg">
+          <p className="truncate text-sm font-semibold text-neutral-600">{teamLabel(team2)}</p>
+          <ScoreDisplay value={score2} size="xl" className="mt-1 block text-neutral-900" />
+        </Card>
       </div>
 
-      {!gameInProgress && !matchDecided && (
-        <div className="mt-6 rounded-xl bg-emerald-50 p-4 text-center">
-          <p className="text-sm font-medium text-emerald-800">
-            Game {currentGame.game_number} complete.
-          </p>
-          <button
-            onClick={handleStartNextGame}
-            disabled={isSubmitting}
-            className="mt-3 w-full rounded-lg bg-neutral-900 px-4 py-3 text-base font-medium text-white disabled:opacity-50"
-          >
-            Start Game {currentGame.game_number + 1}
-          </button>
+      {gameInProgress && (isDeuce || isFinalPoint) && (
+        <div className="mt-3 flex justify-center">
+          <Badge tone={isFinalPoint ? "error" : "warning"} className="px-3 py-1.5 text-sm">
+            {isFinalPoint ? "FINAL POINT" : "DEUCE · Win by 2"}
+          </Badge>
         </div>
       )}
 
-      {!gameInProgress && matchDecided && (
-        <div className="mt-6 rounded-xl bg-emerald-50 p-4 text-center">
-          <p className="text-sm font-medium text-emerald-800">Match decided!</p>
-          <button
-            onClick={handleCompleteMatch}
+      {!gameInProgress && !matchDecided && (
+        <Card className="mt-6 bg-success-50 text-center" padding="lg">
+          <p className="text-sm font-semibold text-success-700">
+            Game {currentGame.game_number} complete
+          </p>
+          <p className="font-score mt-1 text-2xl text-neutral-900">
+            {currentGame.team_1_score} – {currentGame.team_2_score}
+          </p>
+          <Button
+            onClick={handleStartNextGame}
             disabled={isSubmitting}
-            className="mt-3 w-full rounded-lg bg-neutral-900 px-4 py-3 text-base font-medium text-white disabled:opacity-50"
+            size="lg"
+            className="mt-4 w-full"
           >
+            Start Game {currentGame.game_number + 1}
+          </Button>
+        </Card>
+      )}
+
+      {!gameInProgress && matchDecided && (
+        <Card className="mt-6 bg-success-50 text-center" padding="lg">
+          <p className="text-sm font-semibold text-success-700">Match decided</p>
+          <p className="mt-1 text-lg font-bold text-neutral-900">
+            {teamLabel(team1Wins > team2Wins ? team1 : team2)} wins
+          </p>
+          <Button onClick={handleCompleteMatch} disabled={isSubmitting} size="lg" className="mt-4 w-full">
             Complete Match
-          </button>
-        </div>
+          </Button>
+        </Card>
       )}
 
       {gameInProgress && (
@@ -280,7 +359,7 @@ export function LiveScoringScreen({
                       key={p.id}
                       disabled={isSubmitting}
                       onClick={() => setSelection({ kind: "player", player: p, team })}
-                      className="rounded-xl border border-neutral-200 bg-white py-6 text-lg font-medium text-neutral-900 active:bg-neutral-50 disabled:opacity-50"
+                      className="min-h-[72px] rounded-xl border border-surface-border bg-surface py-5 text-lg font-semibold text-neutral-900 shadow-sm transition-colors active:bg-neutral-100 disabled:opacity-50"
                     >
                       {p.name}
                     </button>
@@ -290,9 +369,9 @@ export function LiveScoringScreen({
               <button
                 disabled={isSubmitting}
                 onClick={() => setSelection({ kind: "split" })}
-                className="mt-3 w-full rounded-xl border border-neutral-200 bg-white py-4 text-base font-medium text-neutral-600 active:bg-neutral-50 disabled:opacity-50"
+                className="mt-3 min-h-[52px] w-full rounded-xl border border-surface-border bg-surface text-base font-medium text-neutral-600 active:bg-neutral-100 disabled:opacity-50"
               >
-                SPLIT (can&apos;t attribute)
+                Split — can&apos;t attribute
               </button>
             </>
           )}
@@ -303,14 +382,17 @@ export function LiveScoringScreen({
                 {selection.player.name} —
               </p>
               <div className="mt-3 grid grid-cols-2 gap-3">
-                <button
+                <Button
+                  variant="success"
+                  size="xl"
                   disabled={isSubmitting}
                   onClick={() => submitRally(selection.player.id, "WINNER", selection.team.id)}
-                  className="rounded-xl bg-emerald-600 py-8 text-xl font-semibold text-white active:bg-emerald-700 disabled:opacity-50"
                 >
-                  WINNING SHOT
-                </button>
-                <button
+                  Winning shot
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="xl"
                   disabled={isSubmitting}
                   onClick={() =>
                     submitRally(
@@ -319,18 +401,19 @@ export function LiveScoringScreen({
                       selection.team.id === team1.id ? team2.id : team1.id
                     )
                   }
-                  className="rounded-xl bg-red-600 py-8 text-xl font-semibold text-white active:bg-red-700 disabled:opacity-50"
                 >
-                  DROP
-                </button>
+                  Drop
+                </Button>
               </div>
-              <button
+              <Button
+                variant="ghost"
+                size="md"
+                className="mt-3 w-full"
                 disabled={isSubmitting}
                 onClick={() => setSelection(null)}
-                className="mt-3 w-full py-3 text-sm text-neutral-500 disabled:opacity-50"
               >
                 Cancel
-              </button>
+              </Button>
             </>
           )}
 
@@ -343,49 +426,62 @@ export function LiveScoringScreen({
                 <button
                   disabled={isSubmitting}
                   onClick={() => submitRally(null, "SPLIT", team1.id)}
-                  className="rounded-xl border border-neutral-200 bg-white py-8 text-lg font-medium text-neutral-900 active:bg-neutral-50 disabled:opacity-50"
+                  className="min-h-[72px] rounded-xl border border-surface-border bg-surface py-6 text-lg font-semibold text-neutral-900 active:bg-neutral-100 disabled:opacity-50"
                 >
                   {teamLabel(team1)}
                 </button>
                 <button
                   disabled={isSubmitting}
                   onClick={() => submitRally(null, "SPLIT", team2.id)}
-                  className="rounded-xl border border-neutral-200 bg-white py-8 text-lg font-medium text-neutral-900 active:bg-neutral-50 disabled:opacity-50"
+                  className="min-h-[72px] rounded-xl border border-surface-border bg-surface py-6 text-lg font-semibold text-neutral-900 active:bg-neutral-100 disabled:opacity-50"
                 >
                   {teamLabel(team2)}
                 </button>
               </div>
-              <button
+              <Button
+                variant="ghost"
+                size="md"
+                className="mt-3 w-full"
                 disabled={isSubmitting}
                 onClick={() => setSelection(null)}
-                className="mt-3 w-full py-3 text-sm text-neutral-500 disabled:opacity-50"
               >
                 Cancel
-              </button>
+              </Button>
             </>
           )}
         </div>
       )}
 
-      {error && (
-        <div className="mt-3 rounded-lg bg-red-50 p-3 text-center">
-          <p className="text-sm text-red-700">{error}</p>
-          {pendingSubmission.current && (
-            <button onClick={retrySubmission} className="mt-2 text-sm font-medium text-red-800 underline">
-              Retry
-            </button>
-          )}
+      {errorAction && (
+        <div className="mt-3">
+          <ErrorState
+            message={ERROR_COPY[errorAction].message}
+            reassurance={ERROR_COPY[errorAction].reassurance}
+            onRetry={
+              errorAction === "rally" && pendingSubmission.current
+                ? retrySubmission
+                : errorAction === "undo"
+                  ? handleUndo
+                  : errorAction === "nextGame"
+                    ? handleStartNextGame
+                    : errorAction === "complete"
+                      ? handleCompleteMatch
+                      : undefined
+            }
+          />
         </div>
       )}
 
       {gameInProgress && (
-        <button
+        <Button
+          variant="secondary"
+          size="lg"
           onClick={handleUndo}
           disabled={isSubmitting}
-          className="mt-6 w-full rounded-lg border border-neutral-300 bg-white py-3 text-base font-medium text-neutral-700 disabled:opacity-50"
+          className="mt-6 w-full"
         >
-          Undo Last
-        </button>
+          ↶ Undo last
+        </Button>
       )}
     </main>
   );

@@ -7,6 +7,8 @@ import { TournamentPlayersManager } from "@/components/admin/tournament-players-
 import { GroupsManager } from "@/components/admin/groups-manager";
 import { TournamentCourtsManager } from "@/components/admin/tournament-courts-manager";
 import { MatchesManager } from "@/components/admin/matches-manager";
+import { TournamentProgress, type ProgressStepStatus } from "@/components/ui/tournament-progress";
+import { LiveBadge } from "@/components/ui/badge";
 
 export default async function TournamentDetailPage({
   params,
@@ -52,6 +54,33 @@ export default async function TournamentDetailPage({
           .in("stage_id", stageIds)
       : { data: [] as never[] };
 
+  const groupIds = (groupRows ?? []).map((g) => g.id);
+
+  // §26/§28 — one group_standings + qualification lookup per group. Small
+  // fan-out (a tournament has a handful of groups, not hundreds), run in
+  // parallel rather than serially awaited.
+  const [standingsByGroup, qualificationRows] = await Promise.all([
+    Promise.all(
+      groupIds.map(async (gid) => {
+        const { data } = await supabase.rpc("group_standings", { p_group_id: gid });
+        return [gid, data ?? []] as const;
+      })
+    ),
+    groupIds.length > 0
+      ? supabase
+          .from("group_qualifications")
+          .select("group_id, player_id, qualification_rank")
+          .in("group_id", groupIds)
+      : Promise.resolve({ data: [] as never[] }),
+  ]);
+  const standingsMap = new Map(standingsByGroup);
+  const qualificationsByGroup = new Map<string, { playerId: string; rank: number }[]>();
+  for (const q of qualificationRows.data ?? []) {
+    const list = qualificationsByGroup.get(q.group_id) ?? [];
+    list.push({ playerId: q.player_id, rank: q.qualification_rank });
+    qualificationsByGroup.set(q.group_id, list);
+  }
+
   const stagesWithGroups = (stages ?? []).map((stage) => ({
     ...stage,
     groups: (groupRows ?? [])
@@ -63,6 +92,8 @@ export default async function TournamentDetailPage({
         players: (g.group_players ?? [])
           .map((gp) => gp.players)
           .filter((p): p is { id: string; name: string } => p != null),
+        standings: standingsMap.get(g.id) ?? [],
+        qualifications: qualificationsByGroup.get(g.id) ?? [],
       })),
   }));
 
@@ -115,12 +146,32 @@ export default async function TournamentDetailPage({
     })),
   }));
 
+  // §20 — setup progress, computed from what's actually in place rather
+  // than gating navigation: every section below stays editable regardless,
+  // so the admin is never blocked or forced to restart for missing a step.
+  const setupSteps: { label: string; status: ProgressStepStatus }[] = [
+    { label: "Basics", status: "done" },
+    { label: "Players", status: roster.length > 0 ? "done" : "upcoming" },
+    {
+      label: "Groups",
+      status: stagesWithGroups.some((s) => s.groups.length > 0) ? "done" : "upcoming",
+    },
+    { label: "Courts", status: courts.length > 0 ? "done" : "upcoming" },
+    { label: "Matches", status: matches.length > 0 ? "done" : "upcoming" },
+  ];
+
   return (
-    <main className="mx-auto max-w-2xl px-6 py-10">
+    <main className="mx-auto max-w-5xl px-6 py-10">
       <Link href="/admin/tournaments" className="text-sm text-neutral-500 hover:text-neutral-900">
         ← Tournaments
       </Link>
-      <h1 className="mt-2 text-2xl font-semibold text-neutral-900">{tournament.name}</h1>
+      <div className="mt-2 flex flex-wrap items-center gap-3">
+        <h1 className="text-2xl font-semibold text-neutral-900">{tournament.name}</h1>
+        {tournament.status === "IN_PROGRESS" && <LiveBadge label="IN PROGRESS" />}
+      </div>
+      <div className="mt-3">
+        <TournamentProgress steps={setupSteps} />
+      </div>
 
       <div className="mt-6 space-y-6">
         <TournamentEditForm tournament={tournament} />

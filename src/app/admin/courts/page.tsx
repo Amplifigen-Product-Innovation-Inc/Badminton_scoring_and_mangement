@@ -23,8 +23,8 @@ export default async function CourtsPage() {
         <CreateCourtDialog />
       </div>
 
-      <div className="mt-6 divide-y divide-neutral-100 rounded-xl border border-neutral-200 bg-white">
-        {error && <p className="px-4 py-6 text-center text-red-600">{error.message}</p>}
+      <div className="mt-6 divide-y divide-neutral-100 rounded-xl border border-surface-border bg-surface">
+        {error && <p className="px-4 py-6 text-center text-error-500">We couldn’t load courts right now.</p>}
         {!error && (courts?.length ?? 0) === 0 && (
           <p className="px-4 py-6 text-center text-neutral-400">No courts yet.</p>
         )}

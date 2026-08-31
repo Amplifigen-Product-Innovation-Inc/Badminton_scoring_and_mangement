@@ -22,12 +22,12 @@ export function TournamentEditForm({ tournament }: { tournament: Tournament }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [isCancelling, startCancelTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState(false);
   const [saved, setSaved] = useState(false);
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setError(null);
+    setError(false);
     setSaved(false);
     const formData = new FormData(e.currentTarget);
     const input = {
@@ -46,7 +46,7 @@ export function TournamentEditForm({ tournament }: { tournament: Tournament }) {
         setSaved(true);
         router.refresh();
       } else {
-        setError(res.message);
+        setError(true);
       }
     });
   }
@@ -55,20 +55,20 @@ export function TournamentEditForm({ tournament }: { tournament: Tournament }) {
     if (!confirm(`Cancel "${tournament.name}"? This sets its status to CANCELLED.`)) return;
     startCancelTransition(async () => {
       const res = await cancelTournament(tournament.id);
-      if (res.status === "error") setError(res.message);
+      if (res.status === "error") setError(true);
       else router.refresh();
     });
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 rounded-xl border border-neutral-200 bg-white p-6">
+    <form onSubmit={handleSubmit} className="space-y-4 rounded-xl border border-surface-border bg-surface p-6">
       <div>
         <label className="mb-1 block text-xs font-medium text-neutral-500">Name</label>
         <input
           name="name"
           required
           defaultValue={tournament.name}
-          className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900"
+          className="w-full rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand-500"
         />
       </div>
 
@@ -79,7 +79,7 @@ export function TournamentEditForm({ tournament }: { tournament: Tournament }) {
             name="date"
             type="date"
             defaultValue={tournament.date ?? ""}
-            className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900"
+            className="w-full rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand-500"
           />
         </div>
         <div>
@@ -91,7 +91,7 @@ export function TournamentEditForm({ tournament }: { tournament: Tournament }) {
             type="number"
             min={1}
             defaultValue={tournament.num_courts ?? ""}
-            className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900"
+            className="w-full rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand-500"
           />
         </div>
       </div>
@@ -101,7 +101,7 @@ export function TournamentEditForm({ tournament }: { tournament: Tournament }) {
         <input
           name="location"
           defaultValue={tournament.location ?? ""}
-          className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900"
+          className="w-full rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand-500"
         />
       </div>
 
@@ -110,7 +110,7 @@ export function TournamentEditForm({ tournament }: { tournament: Tournament }) {
         <input
           name="format"
           defaultValue={tournament.format ?? ""}
-          className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900"
+          className="w-full rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand-500"
         />
       </div>
 
@@ -120,7 +120,7 @@ export function TournamentEditForm({ tournament }: { tournament: Tournament }) {
           name="description"
           rows={3}
           defaultValue={tournament.description ?? ""}
-          className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900"
+          className="w-full rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand-500"
         />
       </div>
 
@@ -129,7 +129,7 @@ export function TournamentEditForm({ tournament }: { tournament: Tournament }) {
         <select
           name="status"
           defaultValue={tournament.status}
-          className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900"
+          className="w-full rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand-500"
         >
           {tournamentStatusValues.map((s) => (
             <option key={s} value={s}>
@@ -144,18 +144,18 @@ export function TournamentEditForm({ tournament }: { tournament: Tournament }) {
           type="button"
           onClick={handleCancel}
           disabled={isCancelling || tournament.status === "CANCELLED"}
-          className="text-sm font-medium text-red-600 hover:text-red-700 disabled:opacity-40"
+          className="text-sm font-medium text-error-500 hover:text-error-700 disabled:opacity-40"
         >
           {isCancelling ? "Cancelling…" : "Cancel tournament"}
         </button>
 
         <div className="flex flex-wrap items-center gap-3">
-          {saved && <span className="text-sm text-emerald-600">Saved.</span>}
-          {error && <span className="text-sm text-red-600">{error}</span>}
+          {saved && <span className="text-sm text-success-500">Saved.</span>}
+          {error && <span className="text-sm text-error-500">Couldn’t save changes. Try again.</span>}
           <button
             type="submit"
             disabled={isPending}
-            className="rounded-lg bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50"
+            className="rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50 disabled:bg-neutral-300"
           >
             {isPending ? "Saving…" : "Save changes"}
           </button>

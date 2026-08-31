@@ -3,19 +3,28 @@
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createTournament } from "@/app/admin/tournaments/actions";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { ErrorState } from "@/components/ui/error-state";
 
 /** §10 "+ Create Tournament". Inline panel, not a modal — consistent with
- * AddPlayerDialog (§54: avoid unnecessary modals). */
+ * AddPlayerDialog (§54: avoid unnecessary modals).
+ *
+ * Not the full 7-step guided wizard from §20 — that's a separately-scoped
+ * follow-up (see the design-uplift plan's Stage 3 note). This pass upgrades
+ * the existing single-panel flow to the design system and fixes the same
+ * raw-error leak as the other admin forms (§33).
+ */
 export function CreateTournamentDialog() {
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setError(null);
+    setFailed(false);
     const formData = new FormData(e.currentTarget);
     const input = {
       name: formData.get("name"),
@@ -33,30 +42,23 @@ export function CreateTournamentDialog() {
         setOpen(false);
         router.push(`/admin/tournaments/${res.id}`);
       } else {
-        setError(res.message);
+        setFailed(true);
       }
     });
   }
 
   if (!open) {
-    return (
-      <button
-        onClick={() => setOpen(true)}
-        className="rounded-lg bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-800"
-      >
-        + Create Tournament
-      </button>
-    );
+    return <Button onClick={() => setOpen(true)}>+ Create Tournament</Button>;
   }
 
   return (
-    <div className="w-full max-w-md rounded-xl border border-neutral-200 bg-white p-5 shadow-sm">
+    <Card className="w-full max-w-md" padding="lg">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold text-neutral-900">Create tournament</h2>
         <button
           onClick={() => {
             setOpen(false);
-            setError(null);
+            setFailed(false);
           }}
           className="text-sm text-neutral-400 hover:text-neutral-600"
         >
@@ -69,48 +71,48 @@ export function CreateTournamentDialog() {
           name="name"
           required
           placeholder="Tournament name"
-          className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900"
+          className="w-full rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand-500"
         />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <input
             name="date"
             type="date"
-            className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900"
+            className="w-full rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand-500"
           />
           <input
             name="num_courts"
             type="number"
             min={1}
             placeholder="Number of courts"
-            className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900"
+            className="w-full rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand-500"
           />
         </div>
         <input
           name="location"
           placeholder="Location"
-          className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900"
+          className="w-full rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand-500"
         />
         <input
           name="format"
           placeholder="Format (e.g. Singles, round-robin groups)"
-          className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900"
+          className="w-full rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand-500"
         />
         <textarea
           name="description"
           rows={3}
           placeholder="Description (optional)"
-          className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900"
+          className="w-full rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand-500"
         />
-        <button
-          type="submit"
-          disabled={isPending}
-          className="w-full rounded-lg bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50"
-        >
+        <Button type="submit" disabled={isPending} className="w-full">
           {isPending ? "Creating…" : "Create Tournament"}
-        </button>
+        </Button>
       </form>
 
-      {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
-    </div>
+      {failed && (
+        <div className="mt-3">
+          <ErrorState message="We couldn't create the tournament. Try again." />
+        </div>
+      )}
+    </Card>
   );
 }
