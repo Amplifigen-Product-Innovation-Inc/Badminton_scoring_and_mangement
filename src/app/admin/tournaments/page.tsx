@@ -65,6 +65,7 @@ export default async function TournamentsPage() {
                 <th className="px-4 py-3 font-medium">Format</th>
                 <th className="px-4 py-3 font-medium">Courts</th>
                 <th className="px-4 py-3 font-medium">Status</th>
+                <th className="px-4 py-3 font-medium">Leaderboard</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100">
@@ -84,6 +85,14 @@ export default async function TournamentsPage() {
                   <td className="px-4 py-3 text-neutral-500">{t.num_courts ?? "—"}</td>
                   <td className="px-4 py-3">
                     <StatusBadge status={t.status} />
+                  </td>
+                  <td className="px-4 py-3">
+                    <Link
+                      href={`/admin/tournaments/${t.id}#leaderboard`}
+                      className="text-brand-700 underline decoration-brand-200 underline-offset-2 hover:decoration-brand-700"
+                    >
+                      View
+                    </Link>
                   </td>
                 </tr>
               ))}

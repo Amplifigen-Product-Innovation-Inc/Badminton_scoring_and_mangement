@@ -4,6 +4,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 type Row = {
   player_id: string;
   name: string;
+  current_rating: number;
   matches_played: number;
   matches_won: number;
   matches_lost: number;
@@ -28,6 +29,15 @@ const MEDAL: Record<number, string> = { 1: "🥇", 2: "🥈", 3: "🥉" };
  * UI surfacing them (previously only visible per-player on their own
  * profile page's tournament history, never side-by-side for a whole
  * tournament).
+ *
+ * Rating is the player's existing GLOBAL rating (player_ratings.rating),
+ * shown here for context — not a separate per-tournament rating scale (the
+ * app deliberately has only one rating system; see 0005_match_completion.sql's
+ * documented assumption #3).
+ *
+ * The wrapping `id="leaderboard"` is a quick-access anchor: the tournaments
+ * list (src/app/admin/tournaments/page.tsx) links straight to
+ * `/admin/tournaments/[id]#leaderboard`.
  */
 export function TournamentLeaderboard({
   targetScore,
@@ -45,63 +55,67 @@ export function TournamentLeaderboard({
   });
 
   return (
-    <Card padding="lg">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-sm font-semibold text-neutral-900">Tournament leaderboard</h2>
-        <span className="text-xs text-neutral-400">Game points: {targetScore}</span>
-      </div>
+    <div id="leaderboard">
+      <Card padding="lg">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="text-sm font-semibold text-neutral-900">Tournament leaderboard</h2>
+          <span className="text-xs text-neutral-400">Game points: {targetScore}</span>
+        </div>
 
-      {sorted.length === 0 ? (
-        <div className="mt-4">
-          <EmptyState
-            title="No results yet"
-            description="This fills in once a match in this tournament is completed."
-          />
-        </div>
-      ) : (
-        <div className="mt-3 overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="text-xs text-neutral-500">
-              <tr>
-                <th className="py-1 pr-2 font-medium">Rank</th>
-                <th className="py-1 pr-2 font-medium">Player</th>
-                <th className="py-1 pr-2 font-medium">Played</th>
-                <th className="py-1 pr-2 font-medium">Won</th>
-                <th className="py-1 pr-2 font-medium">Lost</th>
-                <th className="py-1 pr-2 font-medium">Winning shots</th>
-                <th className="py-1 pr-2 font-medium">Dropped shots</th>
-                <th className="py-1 pr-2 font-medium">Split</th>
-                <th className="py-1 pr-2 font-medium">Points</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-neutral-100">
-              {sorted.map((row, i) => {
-                const rank = i + 1;
-                return (
-                  <tr key={row.player_id}>
-                    <td className="py-1.5 pr-2 text-neutral-500">
-                      <span className="inline-flex items-center gap-1">
-                        {MEDAL[rank] && <span aria-hidden>{MEDAL[rank]}</span>}
-                        {rank}
-                      </span>
-                    </td>
-                    <td className="py-1.5 pr-2 font-medium text-neutral-900">{row.name}</td>
-                    <td className="py-1.5 pr-2 text-neutral-600">{row.matches_played}</td>
-                    <td className="py-1.5 pr-2 text-neutral-600">{row.matches_won}</td>
-                    <td className="py-1.5 pr-2 text-neutral-600">{row.matches_lost}</td>
-                    <td className="py-1.5 pr-2 text-success-700">{row.winning_shots}</td>
-                    <td className="py-1.5 pr-2 text-error-500">{row.drops}</td>
-                    <td className="py-1.5 pr-2 text-neutral-500">{row.splits}</td>
-                    <td className="py-1.5 pr-2 font-semibold text-neutral-900">
-                      {row.tournament_points}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </Card>
+        {sorted.length === 0 ? (
+          <div className="mt-4">
+            <EmptyState
+              title="No results yet"
+              description="This fills in once a match in this tournament is completed."
+            />
+          </div>
+        ) : (
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="text-xs text-neutral-500">
+                <tr>
+                  <th className="py-1 pr-2 font-medium">Rank</th>
+                  <th className="py-1 pr-2 font-medium">Player</th>
+                  <th className="py-1 pr-2 font-medium">Rating</th>
+                  <th className="py-1 pr-2 font-medium">Played</th>
+                  <th className="py-1 pr-2 font-medium">Won</th>
+                  <th className="py-1 pr-2 font-medium">Lost</th>
+                  <th className="py-1 pr-2 font-medium">Winning shots</th>
+                  <th className="py-1 pr-2 font-medium">Dropped shots</th>
+                  <th className="py-1 pr-2 font-medium">Split</th>
+                  <th className="py-1 pr-2 font-medium">Points</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-neutral-100">
+                {sorted.map((row, i) => {
+                  const rank = i + 1;
+                  return (
+                    <tr key={row.player_id}>
+                      <td className="py-1.5 pr-2 text-neutral-500">
+                        <span className="inline-flex items-center gap-1">
+                          {MEDAL[rank] && <span aria-hidden>{MEDAL[rank]}</span>}
+                          {rank}
+                        </span>
+                      </td>
+                      <td className="py-1.5 pr-2 font-medium text-neutral-900">{row.name}</td>
+                      <td className="py-1.5 pr-2 font-score text-neutral-600">{row.current_rating}</td>
+                      <td className="py-1.5 pr-2 text-neutral-600">{row.matches_played}</td>
+                      <td className="py-1.5 pr-2 text-neutral-600">{row.matches_won}</td>
+                      <td className="py-1.5 pr-2 text-neutral-600">{row.matches_lost}</td>
+                      <td className="py-1.5 pr-2 text-success-700">{row.winning_shots}</td>
+                      <td className="py-1.5 pr-2 text-error-500">{row.drops}</td>
+                      <td className="py-1.5 pr-2 text-neutral-500">{row.splits}</td>
+                      <td className="py-1.5 pr-2 font-semibold text-neutral-900">
+                        {row.tournament_points}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+    </div>
   );
 }

@@ -132,7 +132,7 @@ export default async function TournamentDetailPage({
   const { data: leaderboardRows } = await supabase
     .from("tournament_player_stats")
     .select(
-      "player_id, matches_played, matches_won, matches_lost, winning_shots, drops, splits, tournament_points, players(name)"
+      "player_id, matches_played, matches_won, matches_lost, winning_shots, drops, splits, tournament_points, players(name, player_ratings(rating))"
     )
     .eq("tournament_id", id);
 
@@ -141,6 +141,10 @@ export default async function TournamentDetailPage({
     .map((r) => ({
       player_id: r.player_id,
       name: r.players!.name,
+      // 50 = the same "new player" default apply_player_rating_update
+      // itself falls back to (0005_match_completion.sql) — a player who
+      // has never had a rating computed has no player_ratings row at all.
+      current_rating: r.players!.player_ratings?.rating ?? 50,
       matches_played: r.matches_played,
       matches_won: r.matches_won,
       matches_lost: r.matches_lost,
