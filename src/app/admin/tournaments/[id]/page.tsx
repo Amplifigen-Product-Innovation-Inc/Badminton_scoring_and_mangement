@@ -8,7 +8,9 @@ import { GroupsManager } from "@/components/admin/groups-manager";
 import { TournamentCourtsManager } from "@/components/admin/tournament-courts-manager";
 import { MatchesManager } from "@/components/admin/matches-manager";
 import { CrossCategoryStandings } from "@/components/admin/cross-category-standings";
+import { TournamentLeaderboard } from "@/components/admin/tournament-leaderboard";
 import { TournamentProgress, type ProgressStepStatus } from "@/components/ui/tournament-progress";
+import { CollapsibleSection } from "@/components/ui/collapsible-section";
 import { LiveBadge } from "@/components/ui/badge";
 
 export default async function TournamentDetailPage({
@@ -112,6 +114,42 @@ export default async function TournamentDetailPage({
     )
   );
 
+  const { data: crossCategoryQualRows } =
+    crossCategoryStageIds.length > 0
+      ? await supabase
+          .from("cross_category_qualifications")
+          .select("stage_id, source_group_id")
+          .in("stage_id", crossCategoryStageIds)
+      : { data: [] as never[] };
+
+  const crossCategoryQualifiedByStage = new Map<string, string[]>();
+  for (const q of crossCategoryQualRows ?? []) {
+    const list = crossCategoryQualifiedByStage.get(q.stage_id) ?? [];
+    list.push(q.source_group_id);
+    crossCategoryQualifiedByStage.set(q.stage_id, list);
+  }
+
+  const { data: leaderboardRows } = await supabase
+    .from("tournament_player_stats")
+    .select(
+      "player_id, matches_played, matches_won, matches_lost, winning_shots, drops, splits, tournament_points, players(name)"
+    )
+    .eq("tournament_id", id);
+
+  const leaderboard = (leaderboardRows ?? [])
+    .filter((r) => r.players)
+    .map((r) => ({
+      player_id: r.player_id,
+      name: r.players!.name,
+      matches_played: r.matches_played,
+      matches_won: r.matches_won,
+      matches_lost: r.matches_lost,
+      winning_shots: r.winning_shots,
+      drops: r.drops,
+      splits: r.splits,
+      tournament_points: r.tournament_points,
+    }));
+
   const { data: courtRows } = await supabase
     .from("tournament_courts")
     .select("status, courts(id, name)")
@@ -164,16 +202,23 @@ export default async function TournamentDetailPage({
   // §20 — setup progress, computed from what's actually in place rather
   // than gating navigation: every section below stays editable regardless,
   // so the admin is never blocked or forced to restart for missing a step.
+  const hasGroups = stagesWithGroups.some((s) => s.groups.length > 0);
   const setupSteps: { label: string; status: ProgressStepStatus }[] = [
     { label: "Basics", status: "done" },
     { label: "Players", status: roster.length > 0 ? "done" : "upcoming" },
-    {
-      label: "Groups",
-      status: stagesWithGroups.some((s) => s.groups.length > 0) ? "done" : "upcoming",
-    },
+    { label: "Groups", status: hasGroups ? "done" : "upcoming" },
     { label: "Courts", status: courts.length > 0 ? "done" : "upcoming" },
     { label: "Matches", status: matches.length > 0 ? "done" : "upcoming" },
   ];
+
+  // Once a tournament has ANY real progress, the setup sections stop being
+  // the primary thing an admin looks at (the leaderboard above takes over
+  // that job) — collapse the whole "Tournament Setup" block by default,
+  // but leave it expanded on a genuinely fresh DRAFT tournament with
+  // nothing in it yet. Each section inside also collapses independently,
+  // based on its own status, so completed steps stay tucked away even
+  // while the block itself is open for whatever's still unfinished.
+  const setupHasAnyProgress = roster.length > 0 || hasGroups || courts.length > 0 || matches.length > 0;
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-10">
@@ -189,24 +234,61 @@ export default async function TournamentDetailPage({
       </div>
 
       <div className="mt-6 space-y-6">
-        <TournamentEditForm tournament={tournament} />
-        <TournamentPlayersManager tournamentId={id} roster={roster} />
-        <StagesManager tournamentId={id} stages={stages ?? []} />
-        <GroupsManager tournamentId={id} stages={stagesWithGroups} roster={roster} />
-        {crossCategoryStageIds.map((sid) => {
-          const stage = stages!.find((s) => s.id === sid)!;
-          const rows = crossCategoryStandingsByStage.get(sid) ?? [];
-          return <CrossCategoryStandings key={sid} stageName={stage.name} rows={rows} />;
-        })}
-        <TournamentCourtsManager tournamentId={id} courts={courts} />
-        <MatchesManager
-          tournamentId={id}
-          stages={stagesWithGroups}
-          roster={roster}
-          courts={courts}
-          scorers={scorers}
-          matches={matches}
-        />
+        <TournamentLeaderboard targetScore={tournament.target_score} rows={leaderboard} />
+
+        <CollapsibleSection title="Tournament Setup" defaultOpen={!setupHasAnyProgress}>
+          <CollapsibleSection title="Basics" defaultOpen={false}>
+            <TournamentEditForm tournament={tournament} />
+          </CollapsibleSection>
+          <CollapsibleSection
+            title="Players"
+            status={`${roster.length} on roster`}
+            defaultOpen={roster.length === 0}
+          >
+            <TournamentPlayersManager tournamentId={id} roster={roster} />
+          </CollapsibleSection>
+          <CollapsibleSection title="Stages" defaultOpen={(stages ?? []).length === 0}>
+            <StagesManager tournamentId={id} stages={stages ?? []} />
+          </CollapsibleSection>
+          <CollapsibleSection title="Groups" defaultOpen={!hasGroups}>
+            <GroupsManager tournamentId={id} stages={stagesWithGroups} roster={roster} />
+            {crossCategoryStageIds.map((sid) => {
+              const stage = stages!.find((s) => s.id === sid)!;
+              const rows = crossCategoryStandingsByStage.get(sid) ?? [];
+              return (
+                <CrossCategoryStandings
+                  key={sid}
+                  stageId={sid}
+                  stageName={stage.name}
+                  tournamentId={id}
+                  rows={rows}
+                  qualifiedGroupIds={crossCategoryQualifiedByStage.get(sid) ?? []}
+                />
+              );
+            })}
+          </CollapsibleSection>
+          <CollapsibleSection
+            title="Courts"
+            status={`${courts.length} added`}
+            defaultOpen={courts.length === 0}
+          >
+            <TournamentCourtsManager tournamentId={id} courts={courts} />
+          </CollapsibleSection>
+          <CollapsibleSection
+            title="Matches"
+            status={`${matches.length} scheduled`}
+            defaultOpen={matches.length === 0}
+          >
+            <MatchesManager
+              tournamentId={id}
+              stages={stagesWithGroups}
+              roster={roster}
+              courts={courts}
+              scorers={scorers}
+              matches={matches}
+            />
+          </CollapsibleSection>
+        </CollapsibleSection>
       </div>
     </main>
   );

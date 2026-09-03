@@ -28,7 +28,15 @@ type Game = {
   rallies: { winningTeamId: string }[];
 };
 
-type Selection = { kind: "player"; player: Player; team: Team } | { kind: "split" } | null;
+// §23 rally flow, single-tap for the common case: "Who took the winning
+// shot?" is asked first — tapping a player submits a WINNER for them
+// immediately, no second tap. Only when there was no clean winning shot
+// does the scorer move to "who dropped" (tapping a player there submits a
+// DROP, crediting the opposing team) — that's also where Split lives
+// ("can't even say who dropped it", not "can't say who won", so it
+// belongs on this step rather than the first one) and picking Split opens
+// one more small step to say which team the point actually goes to.
+type Step = "winner" | "drop" | "split";
 
 /**
  * §23/§55 — the highest-priority screen in the app. Flow: tap a player (or
@@ -83,7 +91,7 @@ export function LiveScoringScreen({
   games: Game[];
 }) {
   const router = useRouter();
-  const [selection, setSelection] = useState<Selection>(null);
+  const [step, setStep] = useState<Step>("winner");
   const [isSubmitting, setIsSubmitting] = useState(false);
   // §33 — track only which action failed, never the raw Supabase/Postgres
   // message; the copy shown per action is a fixed, human string below.
@@ -223,7 +231,7 @@ export function LiveScoringScreen({
 
   function submitRally(playerId: string | null, eventType: "WINNER" | "DROP" | "SPLIT", winningTeamId: string) {
     setErrorAction(null);
-    setSelection(null);
+    setStep("winner");
 
     const id = crypto.randomUUID();
     const args: Parameters<typeof recordRally>[0] = {
@@ -389,10 +397,10 @@ export function LiveScoringScreen({
 
       {gameInProgress && (
         <div className="mt-6 flex-1">
-          {selection === null && (
+          {step === "winner" && (
             <>
               <p className="text-center text-sm font-medium text-neutral-500">
-                Who caused the rally?
+                Who took the winning shot?
               </p>
               <div className="mt-3 grid grid-cols-2 gap-3">
                 {[...team1.players.map((p) => ({ p, team: team1 })), ...team2.players.map((p) => ({ p, team: team2 }))].map(
@@ -400,7 +408,7 @@ export function LiveScoringScreen({
                     <button
                       key={p.id}
                       disabled={isSubmitting}
-                      onClick={() => setSelection({ kind: "player", player: p, team })}
+                      onClick={() => submitRally(p.id, "WINNER", team.id)}
                       className="min-h-[72px] rounded-xl border border-surface-border bg-surface py-5 text-lg font-semibold text-neutral-900 shadow-sm transition-colors active:bg-neutral-100 disabled:opacity-50"
                     >
                       {p.name}
@@ -410,56 +418,53 @@ export function LiveScoringScreen({
               </div>
               <button
                 disabled={isSubmitting}
-                onClick={() => setSelection({ kind: "split" })}
+                onClick={() => setStep("drop")}
                 className="mt-3 min-h-[52px] w-full rounded-xl border border-surface-border bg-surface text-base font-medium text-neutral-600 active:bg-neutral-100 disabled:opacity-50"
               >
-                Split — can&apos;t attribute
+                No winning shot →
               </button>
             </>
           )}
 
-          {selection?.kind === "player" && (
+          {step === "drop" && (
             <>
-              <p className="text-center text-sm font-medium text-neutral-500">
-                {selection.player.name} —
-              </p>
+              <p className="text-center text-sm font-medium text-neutral-500">Who dropped?</p>
               <div className="mt-3 grid grid-cols-2 gap-3">
-                <Button
-                  variant="success"
-                  size="xl"
-                  disabled={isSubmitting}
-                  onClick={() => submitRally(selection.player.id, "WINNER", selection.team.id)}
-                >
-                  Winning shot
-                </Button>
-                <Button
-                  variant="destructive"
-                  size="xl"
-                  disabled={isSubmitting}
-                  onClick={() =>
-                    submitRally(
-                      selection.player.id,
-                      "DROP",
-                      selection.team.id === team1.id ? team2.id : team1.id
-                    )
-                  }
-                >
-                  Drop
-                </Button>
+                {[...team1.players.map((p) => ({ p, team: team1 })), ...team2.players.map((p) => ({ p, team: team2 }))].map(
+                  ({ p, team }) => (
+                    <button
+                      key={p.id}
+                      disabled={isSubmitting}
+                      onClick={() =>
+                        submitRally(p.id, "DROP", team.id === team1.id ? team2.id : team1.id)
+                      }
+                      className="min-h-[72px] rounded-xl border border-surface-border bg-surface py-5 text-lg font-semibold text-neutral-900 shadow-sm transition-colors active:bg-neutral-100 disabled:opacity-50"
+                    >
+                      {p.name}
+                    </button>
+                  )
+                )}
               </div>
+              <button
+                disabled={isSubmitting}
+                onClick={() => setStep("split")}
+                className="mt-3 min-h-[52px] w-full rounded-xl border border-surface-border bg-surface text-base font-medium text-neutral-600 active:bg-neutral-100 disabled:opacity-50"
+              >
+                Split — can&apos;t attribute
+              </button>
               <Button
                 variant="ghost"
                 size="md"
                 className="mt-3 w-full"
                 disabled={isSubmitting}
-                onClick={() => setSelection(null)}
+                onClick={() => setStep("winner")}
               >
-                Cancel
+                Back
               </Button>
             </>
           )}
 
-          {selection?.kind === "split" && (
+          {step === "split" && (
             <>
               <p className="text-center text-sm font-medium text-neutral-500">
                 Which side won the rally?
@@ -485,9 +490,9 @@ export function LiveScoringScreen({
                 size="md"
                 className="mt-3 w-full"
                 disabled={isSubmitting}
-                onClick={() => setSelection(null)}
+                onClick={() => setStep("drop")}
               >
-                Cancel
+                Back
               </Button>
             </>
           )}
@@ -500,7 +505,12 @@ export function LiveScoringScreen({
             message={ERROR_COPY[errorAction].message}
             reassurance={ERROR_COPY[errorAction].reassurance}
             onRetry={
-              errorAction === "rally" && pendingSubmission.current
+              // pendingSubmission.current is always set by the time
+              // errorAction can be "rally" (submitRally sets it before the
+              // doSubmit call that's the only path to that error state) —
+              // no need to read the ref during render just to re-confirm
+              // that.
+              errorAction === "rally"
                 ? retrySubmission
                 : errorAction === "undo"
                   ? handleUndo
