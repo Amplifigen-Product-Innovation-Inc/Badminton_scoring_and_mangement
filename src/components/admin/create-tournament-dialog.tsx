@@ -3,7 +3,7 @@
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createTournament } from "@/app/admin/tournaments/actions";
-import { tournamentFormatValues } from "@/lib/validation/tournament";
+import { tournamentFormatValues, gamePointsValues } from "@/lib/validation/tournament";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ErrorState } from "@/components/ui/error-state";
@@ -12,6 +12,11 @@ const FORMAT_LABELS: Record<(typeof tournamentFormatValues)[number], string> = {
   SINGLES: "Singles",
   DOUBLES: "Doubles",
   MIXED_DOUBLES: "Mixed Doubles",
+};
+
+const GAME_POINTS_LABELS: Record<(typeof gamePointsValues)[number], string> = {
+  "11": "11 points",
+  "21": "21 points (standard)",
 };
 
 /** §10 "+ Create Tournament". Inline panel, not a modal — consistent with
@@ -38,6 +43,7 @@ export function CreateTournamentDialog() {
       date: formData.get("date"),
       location: formData.get("location"),
       format: formData.get("format"),
+      game_points: formData.get("game_points"),
       num_courts: formData.get("num_courts"),
       description: formData.get("description"),
     };
@@ -108,6 +114,17 @@ export function CreateTournamentDialog() {
           {tournamentFormatValues.map((f) => (
             <option key={f} value={f}>
               {FORMAT_LABELS[f]}
+            </option>
+          ))}
+        </select>
+        <select
+          name="game_points"
+          defaultValue="21"
+          className="w-full rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand-500"
+        >
+          {gamePointsValues.map((g) => (
+            <option key={g} value={g}>
+              {GAME_POINTS_LABELS[g]}
             </option>
           ))}
         </select>

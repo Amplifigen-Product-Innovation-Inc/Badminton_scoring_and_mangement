@@ -20,7 +20,7 @@ export default async function TournamentDetailPage({
   const supabase = await createClient();
   const { data: tournament } = await supabase
     .from("tournaments")
-    .select("id, name, date, location, format, num_courts, description, status")
+    .select("id, name, date, location, format, num_courts, description, status, target_score")
     .eq("id", id)
     .maybeSingle();
 

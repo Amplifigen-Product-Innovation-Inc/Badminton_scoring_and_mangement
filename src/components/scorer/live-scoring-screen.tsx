@@ -55,6 +55,9 @@ export function LiveScoringScreen({
   status,
   courtName,
   tournamentName,
+  targetScore,
+  winBy,
+  maxScore,
   team1,
   team2,
   games,
@@ -66,6 +69,15 @@ export function LiveScoringScreen({
   status: string;
   courtName: string | null;
   tournamentName: string;
+  /** Tournament-configured scoring (0001_init_schema.sql's target_score/
+   * win_by/max_score — e.g. 21/2/30 standard, or 11/2/15 for a short game).
+   * recompute_game_score already uses these to decide when a game actually
+   * ends; the deuce/final-point call-outs below are derived from the same
+   * numbers purely for display, so they stay correct for any game-points
+   * choice rather than assuming standard 21-point scoring. */
+  targetScore: number;
+  winBy: number;
+  maxScore: number;
   team1: Team;
   team2: Team;
   games: Game[];
@@ -186,12 +198,19 @@ export function LiveScoringScreen({
   const score1 = optimisticIsCurrent ? optimistic.team1 : currentGame.team_1_score;
   const score2 = optimisticIsCurrent ? optimistic.team2 : currentGame.team_2_score;
 
-  // §17 — the scorer never has to remember the rules. Standard badminton:
-  // deuce (win-by-2) once both sides reach 20, decided outright at 30 —
-  // the last point before that cap is the "final point" call-out.
+  // §17 — the scorer never has to remember the rules. Deuce (win by winBy)
+  // once both sides reach targetScore - 1 (20 for standard 21-point
+  // scoring, 10 for an 11-point game), decided outright at maxScore
+  // regardless of lead — the last point before that cap is "final point".
+  // Generalized from the tournament's own scoring config rather than
+  // hardcoded to 21/30, so this stays correct for any game-points choice.
   const rallyPoint = Math.max(score1, score2) + 1;
-  const isDeuce = score1 >= 20 && score2 >= 20 && Math.abs(score1 - score2) < 2 && rallyPoint < 30;
-  const isFinalPoint = score1 === 29 && score2 === 29;
+  const isDeuce =
+    score1 >= targetScore - 1 &&
+    score2 >= targetScore - 1 &&
+    Math.abs(score1 - score2) < winBy &&
+    rallyPoint < maxScore;
+  const isFinalPoint = score1 === maxScore - 1 && score2 === maxScore - 1;
 
   // Who's serving — derived automatically from the rally history the
   // scorer is already recording (see computeCurrentServer); never asked
@@ -332,7 +351,7 @@ export function LiveScoringScreen({
       {gameInProgress && (isDeuce || isFinalPoint) && (
         <div className="mt-3 flex justify-center">
           <Badge tone={isFinalPoint ? "error" : "warning"} className="px-3 py-1.5 text-sm">
-            {isFinalPoint ? "FINAL POINT" : "DEUCE · Win by 2"}
+            {isFinalPoint ? "FINAL POINT" : `DEUCE · Win by ${winBy}`}
           </Badge>
         </div>
       )}

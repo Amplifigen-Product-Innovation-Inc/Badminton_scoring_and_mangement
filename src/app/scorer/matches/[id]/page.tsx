@@ -15,7 +15,7 @@ export default async function ScorerMatchPage({ params }: { params: Promise<{ id
     .from("matches")
     .select(
       `id, match_number, match_type, best_of, status,
-       courts(name), tournaments(name),
+       courts(name), tournaments(name, target_score, win_by, max_score),
        teams!teams_match_id_fkey(id, team_number, match_participants(players(id, name))),
        games(id, game_number, status, team_1_score, team_2_score, winner_team_id,
              rallies(winning_team_id, sequence_number))`
@@ -55,6 +55,9 @@ export default async function ScorerMatchPage({ params }: { params: Promise<{ id
       status={match.status}
       courtName={match.courts?.name ?? null}
       tournamentName={match.tournaments?.name ?? ""}
+      targetScore={match.tournaments?.target_score ?? 21}
+      winBy={match.tournaments?.win_by ?? 2}
+      maxScore={match.tournaments?.max_score ?? 30}
       team1={{ id: team1.id, players: toPlayers(team1) }}
       team2={{ id: team2.id, players: toPlayers(team2) }}
       games={games}

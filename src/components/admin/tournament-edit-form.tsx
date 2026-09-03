@@ -3,12 +3,22 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { updateTournament, cancelTournament } from "@/app/admin/tournaments/actions";
-import { tournamentStatusValues, tournamentFormatValues } from "@/lib/validation/tournament";
+import {
+  tournamentStatusValues,
+  tournamentFormatValues,
+  gamePointsValues,
+  gamePointsFromTargetScore,
+} from "@/lib/validation/tournament";
 
 const FORMAT_LABELS: Record<(typeof tournamentFormatValues)[number], string> = {
   SINGLES: "Singles",
   DOUBLES: "Doubles",
   MIXED_DOUBLES: "Mixed Doubles",
+};
+
+const GAME_POINTS_LABELS: Record<(typeof gamePointsValues)[number], string> = {
+  "11": "11 points",
+  "21": "21 points (standard)",
 };
 
 type Tournament = {
@@ -20,6 +30,7 @@ type Tournament = {
   num_courts: number | null;
   description: string | null;
   status: (typeof tournamentStatusValues)[number];
+  target_score: number;
 };
 
 /** §10 edit + cancel. Admin has full override on status (no state-machine
@@ -41,6 +52,7 @@ export function TournamentEditForm({ tournament }: { tournament: Tournament }) {
       date: formData.get("date"),
       location: formData.get("location"),
       format: formData.get("format"),
+      game_points: formData.get("game_points"),
       num_courts: formData.get("num_courts"),
       description: formData.get("description"),
       status: formData.get("status"),
@@ -125,6 +137,24 @@ export function TournamentEditForm({ tournament }: { tournament: Tournament }) {
             </option>
           ))}
         </select>
+      </div>
+
+      <div>
+        <label className="mb-1 block text-xs font-medium text-neutral-500">Game points</label>
+        <select
+          name="game_points"
+          defaultValue={gamePointsFromTargetScore(tournament.target_score)}
+          className="w-full rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand-500"
+        >
+          {gamePointsValues.map((g) => (
+            <option key={g} value={g}>
+              {GAME_POINTS_LABELS[g]}
+            </option>
+          ))}
+        </select>
+        <p className="mt-1 text-xs text-neutral-400">
+          Applies to every game scored in this tournament going forward.
+        </p>
       </div>
 
       <div>
