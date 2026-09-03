@@ -189,30 +189,32 @@ select is(
 
 -- Scorer A can record a rally on their own LIVE match, attributed to
 -- themselves. winning_team_id (0004) must be player c001's own team
--- (1a02) for a WINNER rally to pass validate_rally.
+-- (1a02) for a WINNER rally to pass validate_rally; losing_player_id
+-- (0013) must be a participant on the opposing team (c002).
 select lives_ok(
-  $$ insert into rallies (game_id, player_id, event_type, created_by, winning_team_id)
-     values ('00000000-0000-0000-0000-000000001a04', '00000000-0000-0000-0000-00000000c001', 'WINNER', '00000000-0000-0000-0000-00000000b002', '00000000-0000-0000-0000-000000001a02') $$,
+  $$ insert into rallies (game_id, player_id, event_type, created_by, winning_team_id, losing_player_id)
+     values ('00000000-0000-0000-0000-000000001a04', '00000000-0000-0000-0000-00000000c001', 'WINNER', '00000000-0000-0000-0000-00000000b002', '00000000-0000-0000-0000-000000001a02', '00000000-0000-0000-0000-00000000c002') $$,
   'scorer A can insert a rally into their own LIVE assigned match, attributed to themselves'
 );
 
--- Scorer A cannot record a rally attributed to someone else. winning_team_id
--- still correctly credits c001's own team so this fails on the intended RLS
--- check (created_by), not on validate_rally.
+-- Scorer A cannot record a rally attributed to someone else. winning_team_id/
+-- losing_player_id still correctly credit c001/c002 so this fails on the
+-- intended RLS check (created_by), not on validate_rally.
 select throws_ok(
-  $$ insert into rallies (game_id, player_id, event_type, created_by, winning_team_id)
-     values ('00000000-0000-0000-0000-000000001a04', '00000000-0000-0000-0000-00000000c001', 'WINNER', '00000000-0000-0000-0000-00000000b003', '00000000-0000-0000-0000-000000001a02') $$,
+  $$ insert into rallies (game_id, player_id, event_type, created_by, winning_team_id, losing_player_id)
+     values ('00000000-0000-0000-0000-000000001a04', '00000000-0000-0000-0000-00000000c001', 'WINNER', '00000000-0000-0000-0000-00000000b003', '00000000-0000-0000-0000-000000001a02', '00000000-0000-0000-0000-00000000c002') $$,
   '42501',
   null,
   'scorer A cannot insert a rally attributed to a different recorder'
 );
 
--- Scorer A cannot record a rally into scorer B's match. winning_team_id
--- correctly credits c003's own team within match B (1b02) so this fails on
--- the intended RLS check (match ownership), not on validate_rally.
+-- Scorer A cannot record a rally into scorer B's match. winning_team_id/
+-- losing_player_id correctly credit c003/c004 within match B (1b02/1b03) so
+-- this fails on the intended RLS check (match ownership), not on
+-- validate_rally.
 select throws_ok(
-  $$ insert into rallies (game_id, player_id, event_type, created_by, winning_team_id)
-     values ('00000000-0000-0000-0000-000000001b04', '00000000-0000-0000-0000-00000000c003', 'WINNER', '00000000-0000-0000-0000-00000000b002', '00000000-0000-0000-0000-000000001b02') $$,
+  $$ insert into rallies (game_id, player_id, event_type, created_by, winning_team_id, losing_player_id)
+     values ('00000000-0000-0000-0000-000000001b04', '00000000-0000-0000-0000-00000000c003', 'WINNER', '00000000-0000-0000-0000-00000000b002', '00000000-0000-0000-0000-000000001b02', '00000000-0000-0000-0000-00000000c004') $$,
   '42501',
   null,
   'scorer A cannot insert a rally into scorer B''s match'

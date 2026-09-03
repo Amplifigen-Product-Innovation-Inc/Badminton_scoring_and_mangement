@@ -14,7 +14,7 @@ export default async function ScorerMatchPage({ params }: { params: Promise<{ id
   const { data: match } = await supabase
     .from("matches")
     .select(
-      `id, match_number, match_type, best_of, status,
+      `id, match_number, match_type, best_of, status, first_server_player_id,
        courts(name), tournaments(name, target_score, win_by, max_score),
        teams!teams_match_id_fkey(id, team_number, match_participants(players(id, name))),
        games(id, game_number, status, team_1_score, team_2_score, winner_team_id,
@@ -61,6 +61,7 @@ export default async function ScorerMatchPage({ params }: { params: Promise<{ id
       team1={{ id: team1.id, players: toPlayers(team1) }}
       team2={{ id: team2.id, players: toPlayers(team2) }}
       games={games}
+      firstServerPlayerId={match.first_server_player_id}
     />
   );
 }

@@ -43,7 +43,7 @@ export default async function ScorerHomePage() {
   let query = supabase
     .from("matches")
     .select(
-      "id, match_number, match_type, best_of, status, courts(name), tournaments(name), teams!teams_match_id_fkey(team_number, match_participants(players(name)))"
+      "id, match_number, match_type, best_of, status, courts(name), tournaments(name), teams!teams_match_id_fkey(id, team_number, match_participants(players(id, name)))"
     )
     .in("status", ["LIVE", "SCHEDULED"])
     .order("status"); // LIVE < SCHEDULED alphabetically — puts in-progress matches first
@@ -99,6 +99,10 @@ export default async function ScorerHomePage() {
           const team2 = m.teams?.find((t) => t.team_number === 2);
           const names = (t: typeof team1) =>
             (t?.match_participants ?? []).map((mp) => mp.players?.name).filter(Boolean).join(" / ");
+          const toPlayers = (t: typeof team1) =>
+            (t?.match_participants ?? [])
+              .map((mp) => mp.players)
+              .filter((p): p is { id: string; name: string } => p != null);
 
           return (
             <div key={m.id} className="rounded-xl border border-surface-border bg-surface p-4">
@@ -109,7 +113,15 @@ export default async function ScorerHomePage() {
                 {names(team1)} <span className="text-neutral-400">vs</span> {names(team2)}
               </p>
               <p className="mt-1 text-sm text-neutral-500">{m.courts?.name ?? "No court assigned"}</p>
-              <StartMatchButton matchId={m.id} />
+              {team1 && team2 && (
+                <div className="mt-3">
+                  <StartMatchButton
+                    matchId={m.id}
+                    team1={{ id: team1.id, players: toPlayers(team1) }}
+                    team2={{ id: team2.id, players: toPlayers(team2) }}
+                  />
+                </div>
+              )}
             </div>
           );
         })}

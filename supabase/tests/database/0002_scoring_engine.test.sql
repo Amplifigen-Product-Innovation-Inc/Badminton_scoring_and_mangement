@@ -23,7 +23,7 @@ begin;
 
 create extension if not exists pgtap;
 
-select plan(28);
+select plan(31);
 
 -- ----------------------------------------------------------------------------
 -- Fixtures
@@ -79,15 +79,50 @@ $$;
 select test_login('00000000-0000-0000-0000-00000000a102');
 set local role authenticated;
 
--- Player 1 (team 1) hits a winner -> team 1's score.
-insert into rallies (game_id, player_id, event_type, created_by, winning_team_id)
+-- Player 1 (team 1) hits a winner -> team 1's score. losing_player_id
+-- (0013) must name the specific opposing player who missed it — player 2,
+-- the only other participant in this singles match.
+insert into rallies (game_id, player_id, event_type, created_by, winning_team_id, losing_player_id)
 values ('00000000-0000-0000-0000-00000000f104', '00000000-0000-0000-0000-00000000c101', 'WINNER',
-        '00000000-0000-0000-0000-00000000b102', '00000000-0000-0000-0000-00000000f102');
+        '00000000-0000-0000-0000-00000000b102', '00000000-0000-0000-0000-00000000f102', '00000000-0000-0000-0000-00000000c102');
 
 select is(
   (select team_1_score from games where id = '00000000-0000-0000-0000-00000000f104'),
   1,
   'WINNER credits the scoring player''s own team'
+);
+
+-- New (0013): a WINNER rally without a losing_player_id is rejected by the
+-- rallies_winner_requires_losing_player CHECK constraint.
+select throws_ok(
+  $$ insert into rallies (game_id, player_id, event_type, created_by, winning_team_id)
+     values ('00000000-0000-0000-0000-00000000f104', '00000000-0000-0000-0000-00000000c101', 'WINNER',
+             '00000000-0000-0000-0000-00000000b102', '00000000-0000-0000-0000-00000000f102') $$,
+  '23514',
+  null,
+  'WINNER rejected without a losing_player_id'
+);
+
+-- A WINNER rally whose losing_player_id is on the SCORING player's own team
+-- (i.e. not actually the opponent) is rejected by validate_rally.
+select throws_ok(
+  $$ insert into rallies (game_id, player_id, event_type, created_by, winning_team_id, losing_player_id)
+     values ('00000000-0000-0000-0000-00000000f104', '00000000-0000-0000-0000-00000000c101', 'WINNER',
+             '00000000-0000-0000-0000-00000000b102', '00000000-0000-0000-0000-00000000f102', '00000000-0000-0000-0000-00000000c101') $$,
+  'P0001',
+  null,
+  'WINNER rejected when losing_player_id is on the scoring player''s own team'
+);
+
+-- A DROP rally is single-attribution, same as before 0013 — a
+-- losing_player_id on it is rejected by the CHECK constraint.
+select throws_ok(
+  $$ insert into rallies (game_id, player_id, event_type, created_by, winning_team_id, losing_player_id)
+     values ('00000000-0000-0000-0000-00000000f104', '00000000-0000-0000-0000-00000000c101', 'DROP',
+             '00000000-0000-0000-0000-00000000b102', '00000000-0000-0000-0000-00000000f103', '00000000-0000-0000-0000-00000000c102') $$,
+  '23514',
+  null,
+  'DROP rejected when a losing_player_id is given'
 );
 
 -- Player 1 (team 1) drops -> opposing team (team 2) gets the point.
@@ -252,16 +287,29 @@ select is(
 );
 
 -- Scenario: cap wins outright even with only a 1-point lead (30-29).
+-- Rallies MUST be interleaved (not front-loaded 30-then-29) — since
+-- 0012_rally_game_status_guard.sql, an insert into a game that's already
+-- COMPLETED is rejected for every role, so a bulk 30-in-a-row-for-team-1
+-- insert would complete the game around row 21 and reject rows 22-30 of
+-- its own statement. A one-rally-at-a-time DO loop keeps the running
+-- score within 1 point of even at every step (exactly like real
+-- alternating play), so the game only ever completes on the true final
+-- rally, at 30-29.
 insert into games (id, match_id, game_number, status) values
   ('00000000-0000-0000-0000-00000000f111', '00000000-0000-0000-0000-00000000f105', 4, 'IN_PROGRESS');
-insert into rallies (game_id, player_id, event_type, created_by, winning_team_id)
-  select '00000000-0000-0000-0000-00000000f111', null, 'SPLIT', '00000000-0000-0000-0000-00000000b101',
-         '00000000-0000-0000-0000-00000000f106'
-  from generate_series(1, 30);
-insert into rallies (game_id, player_id, event_type, created_by, winning_team_id)
-  select '00000000-0000-0000-0000-00000000f111', null, 'SPLIT', '00000000-0000-0000-0000-00000000b101',
-         '00000000-0000-0000-0000-00000000f107'
-  from generate_series(1, 29);
+do $$
+begin
+  for i in 1..29 loop
+    insert into rallies (game_id, player_id, event_type, created_by, winning_team_id)
+      values ('00000000-0000-0000-0000-00000000f111', null, 'SPLIT', '00000000-0000-0000-0000-00000000b101', '00000000-0000-0000-0000-00000000f106');
+    insert into rallies (game_id, player_id, event_type, created_by, winning_team_id)
+      values ('00000000-0000-0000-0000-00000000f111', null, 'SPLIT', '00000000-0000-0000-0000-00000000b101', '00000000-0000-0000-0000-00000000f107');
+  end loop;
+  -- 29-29 so far (not complete: diff 0, neither at cap) — the 30th point
+  -- for team 1 is the one that actually completes the game via the cap.
+  insert into rallies (game_id, player_id, event_type, created_by, winning_team_id)
+    values ('00000000-0000-0000-0000-00000000f111', null, 'SPLIT', '00000000-0000-0000-0000-00000000b101', '00000000-0000-0000-0000-00000000f106');
+end $$;
 
 select is(
   (select team_1_score from games where id = '00000000-0000-0000-0000-00000000f111'),

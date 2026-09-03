@@ -14,7 +14,7 @@ begin;
 
 create extension if not exists pgtap;
 
-select plan(12);
+select plan(15);
 
 insert into auth.users (id, email, encrypted_password, email_confirmed_at, instance_id)
 values
@@ -171,6 +171,56 @@ select throws_ok(
   'P0001',
   null,
   'start_next_game refuses while the only game is still IN_PROGRESS (Bo1)'
+);
+
+-- ----------------------------------------------------------------------------
+-- 0013_first_server.sql — start_match's optional first_server_player_id.
+-- ----------------------------------------------------------------------------
+
+insert into matches (id, tournament_id, stage_id, match_number, match_type, best_of, status, scorer_id)
+values ('00000000-0000-0000-0000-00000000f308', '00000000-0000-0000-0000-00000000d301',
+        '00000000-0000-0000-0000-00000000e301', 3, 'SINGLES', 1, 'SCHEDULED', '00000000-0000-0000-0000-00000000b302');
+insert into teams (id, match_id, team_number) values
+  ('00000000-0000-0000-0000-00000000f309', '00000000-0000-0000-0000-00000000f308', 1),
+  ('00000000-0000-0000-0000-00000000f30a', '00000000-0000-0000-0000-00000000f308', 2);
+insert into match_participants (match_id, team_id, player_id) values
+  ('00000000-0000-0000-0000-00000000f308', '00000000-0000-0000-0000-00000000f309', '00000000-0000-0000-0000-00000000c301'),
+  ('00000000-0000-0000-0000-00000000f308', '00000000-0000-0000-0000-00000000f30a', '00000000-0000-0000-0000-00000000c302');
+
+select test_login('00000000-0000-0000-0000-00000000a302');
+set local role authenticated;
+
+select lives_ok(
+  $$ select start_match('00000000-0000-0000-0000-00000000f308', '00000000-0000-0000-0000-00000000c302') $$,
+  'start_match accepts a first_server_player_id that is a participant in the match'
+);
+select is(
+  (select first_server_player_id from matches where id = '00000000-0000-0000-0000-00000000f308'),
+  '00000000-0000-0000-0000-00000000c302'::uuid,
+  'the chosen first server is stored on the match'
+);
+
+-- A fresh SCHEDULED match, tried with a first_server_player_id who isn't a
+-- participant — must be rejected before the match is ever started.
+reset role;
+insert into matches (id, tournament_id, stage_id, match_number, match_type, best_of, status, scorer_id)
+values ('00000000-0000-0000-0000-00000000f30b', '00000000-0000-0000-0000-00000000d301',
+        '00000000-0000-0000-0000-00000000e301', 4, 'SINGLES', 1, 'SCHEDULED', '00000000-0000-0000-0000-00000000b302');
+insert into teams (id, match_id, team_number) values
+  ('00000000-0000-0000-0000-00000000f30c', '00000000-0000-0000-0000-00000000f30b', 1),
+  ('00000000-0000-0000-0000-00000000f30d', '00000000-0000-0000-0000-00000000f30b', 2);
+insert into match_participants (match_id, team_id, player_id) values
+  ('00000000-0000-0000-0000-00000000f30b', '00000000-0000-0000-0000-00000000f30c', '00000000-0000-0000-0000-00000000c301'),
+  ('00000000-0000-0000-0000-00000000f30b', '00000000-0000-0000-0000-00000000f30d', '00000000-0000-0000-0000-00000000c302');
+
+select test_login('00000000-0000-0000-0000-00000000a302');
+set local role authenticated;
+
+select throws_ok(
+  $$ select start_match('00000000-0000-0000-0000-00000000f30b', '00000000-0000-0000-0000-00000000c101') $$,
+  'P0001',
+  null,
+  'start_match rejects a first_server_player_id who is not a participant in this match'
 );
 
 select finish();

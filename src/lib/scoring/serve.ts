@@ -16,11 +16,16 @@
  *     parity) when they gain serve is who serves next — determined by
  *     wherever that swap history last left them.
  *
- * DEFAULT (no data to base it on, and the scorer isn't asked): team 1
- * serves first each game, starting with its first listed player at
- * "right". This only affects which name is shown as serving — it never
- * affects the actual score, which is computed independently
- * (recompute_game_score, driven by rallies.winning_team_id).
+ * FIRST SERVER (0014_first_server.sql): the scorer is asked once, at match
+ * start, who serves first — passed in here as `firstServer` and used only
+ * to seed game 1's starting side/player. Games 2+ still fall back to the
+ * DEFAULT below (a known simplification: real badminton has the previous
+ * game's winner serve first, not implemented here). With no firstServer at
+ * all (older matches started before this existed), team 1 serves first
+ * each game, starting with its first listed player at "right". This only
+ * affects which name is shown as serving — it never affects the actual
+ * score, which is computed independently (recompute_game_score, driven by
+ * rallies.winning_team_id).
  */
 
 export type ServeTeam = { id: string; players: { id: string; name: string }[] };
@@ -36,7 +41,8 @@ export type ServerState = {
 export function computeCurrentServer(
   rallies: ServeRally[],
   team1: ServeTeam,
-  team2: ServeTeam
+  team2: ServeTeam,
+  firstServer?: { teamId: string; playerId: string }
 ): ServerState {
   // [right, left] occupants for each team; swaps in place as service
   // continues. Length 1 for singles — trivially always "server".
@@ -46,6 +52,18 @@ export function computeCurrentServer(
   };
 
   let servingTeamId = team1.id;
+
+  if (firstServer) {
+    servingTeamId = firstServer.teamId;
+    const pos = positions[firstServer.teamId];
+    const chosenIdx = pos.findIndex((p) => p.id === firstServer.playerId);
+    // Put the chosen player at index 0 ("right", matching score-parity 0
+    // at the game's 0-0 start) — leaves singles (length 1) untouched.
+    if (chosenIdx > 0) {
+      positions[firstServer.teamId] = [pos[chosenIdx], ...pos.slice(0, chosenIdx), ...pos.slice(chosenIdx + 1)];
+    }
+  }
+
   const score: Record<string, number> = { [team1.id]: 0, [team2.id]: 0 };
 
   for (const rally of rallies) {

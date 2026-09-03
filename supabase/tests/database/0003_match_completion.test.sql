@@ -24,7 +24,7 @@ begin;
 
 create extension if not exists pgtap;
 
-select plan(34);
+select plan(36);
 
 -- ----------------------------------------------------------------------------
 -- Fixtures
@@ -61,8 +61,14 @@ $$;
 -- ============================================================================
 -- MATCH A — Bo1, player1 vs player2, scorer A. Player1 wins 21-15 via 21
 -- WINNER rallies (all team1/player1) against 15 SPLIT rallies (team2, no
--- player attribution — exercises assumption 1's shared-splits count and
--- assumption 2's neutral fallback for player2, who has zero WINNER/DROP).
+-- player attribution — exercises assumption 1's shared-splits count).
+--
+-- Every WINNER rally now (0013) also pairs player2 as losing_player_id —
+-- player2 has no clean winning shot of their own, so all 21 of player1's
+-- winners double as 21 drops charged to player2 (normalized -1.0,
+-- performance 0) rather than the pre-0013 "zero WINNER+DROP -> neutral 50
+-- fallback" case (assumption 2 still applies, just no longer reachable by
+-- this fixture — a real zero-signal player now needs a SPLIT-only game).
 -- ============================================================================
 
 select test_login('00000000-0000-0000-0000-00000000a201');
@@ -80,14 +86,19 @@ insert into match_participants (match_id, team_id, player_id) values
 insert into games (id, match_id, game_number, status) values
   ('00000000-0000-0000-0000-00000000f204', '00000000-0000-0000-0000-00000000f201', 1, 'IN_PROGRESS');
 
-insert into rallies (game_id, player_id, event_type, created_by, winning_team_id)
-  select '00000000-0000-0000-0000-00000000f204', '00000000-0000-0000-0000-00000000c201', 'WINNER',
-         '00000000-0000-0000-0000-00000000b201', '00000000-0000-0000-0000-00000000f202'
-  from generate_series(1, 21);
+-- Team 2's (below-target) points must land FIRST — since 0012's game-status
+-- guard, an insert into an already-COMPLETED game is rejected for every
+-- role, and 21 straight WINNER rows for team 1 would complete the game at
+-- 21-0 before team 2's 15 ever got recorded (same ordering pitfall as
+-- 0002/0004's fixtures).
 insert into rallies (game_id, player_id, event_type, created_by, winning_team_id)
   select '00000000-0000-0000-0000-00000000f204', null, 'SPLIT',
          '00000000-0000-0000-0000-00000000b201', '00000000-0000-0000-0000-00000000f203'
   from generate_series(1, 15);
+insert into rallies (game_id, player_id, event_type, created_by, winning_team_id, losing_player_id)
+  select '00000000-0000-0000-0000-00000000f204', '00000000-0000-0000-0000-00000000c201', 'WINNER',
+         '00000000-0000-0000-0000-00000000b201', '00000000-0000-0000-0000-00000000f202', '00000000-0000-0000-0000-00000000c202'
+  from generate_series(1, 21);
 
 select is(
   (select status from games where id = '00000000-0000-0000-0000-00000000f204')::text,
@@ -133,19 +144,20 @@ select is(
   'player1 has exactly one rating history row'
 );
 
--- Player 2: winners=0, drops=0 -> undefined -> fallback performance=50;
--- lost -> match_result=0 -> match_performance = 50*.8+0*.2 = 40.
--- New rating = 50*.8 + 40*.2 = 48 (Intermediate, 45-59).
+-- Player 2 (0013): winners=0, drops=21 (paired from player1's 21 WINNER
+-- rallies) -> normalized=-1.0 -> performance=0; lost -> match_result=0 ->
+-- match_performance = 0*.8+0*.2 = 0.
+-- New rating = 50*.8 + 0*.2 = 40 (Developing, 30-44).
 select is(
   (select rating from player_ratings where player_id = '00000000-0000-0000-0000-00000000c202'),
-  48.00,
-  'player2 new rating: 50 -> 48 (no decisive rallies, neutral fallback + loss)'
+  40.00,
+  'player2 new rating: 50 -> 40 (paired drops from player1''s winners + loss)'
 );
 select is(
   (select rc.name from player_ratings pr join rating_categories rc on rc.id = pr.category_id
     where pr.player_id = '00000000-0000-0000-0000-00000000c202'),
-  'Intermediate',
-  'player2 category Intermediate at rating 48'
+  'Developing',
+  'player2 category Developing at rating 40'
 );
 
 -- tournament_player_stats: player1 (won).
@@ -162,8 +174,10 @@ select is((select tournament_rating from tournament_player_stats where tournamen
 -- tournament_player_stats: player2 (lost).
 select is((select matches_lost from tournament_player_stats where tournament_id = '00000000-0000-0000-0000-00000000d201' and player_id = '00000000-0000-0000-0000-00000000c202'), 1, 'player2 matches_lost=1');
 select is((select tournament_points from tournament_player_stats where tournament_id = '00000000-0000-0000-0000-00000000d201' and player_id = '00000000-0000-0000-0000-00000000c202'), 0, 'player2 tournament_points=0 (loss)');
+select is((select winning_shots from tournament_player_stats where tournament_id = '00000000-0000-0000-0000-00000000d201' and player_id = '00000000-0000-0000-0000-00000000c202'), 0, 'player2 winning_shots=0');
+select is((select drops from tournament_player_stats where tournament_id = '00000000-0000-0000-0000-00000000d201' and player_id = '00000000-0000-0000-0000-00000000c202'), 21, 'player2 drops=21 (0013: paired from player1''s 21 WINNER rallies)');
 select is((select splits from tournament_player_stats where tournament_id = '00000000-0000-0000-0000-00000000d201' and player_id = '00000000-0000-0000-0000-00000000c202'), 15, 'player2 splits=15 (same shared match total)');
-select is((select average_performance from tournament_player_stats where tournament_id = '00000000-0000-0000-0000-00000000d201' and player_id = '00000000-0000-0000-0000-00000000c202'), 40.0, 'player2 average_performance=40');
+select is((select average_performance from tournament_player_stats where tournament_id = '00000000-0000-0000-0000-00000000d201' and player_id = '00000000-0000-0000-0000-00000000c202'), 0.0, 'player2 average_performance=0');
 
 -- Idempotency: completing an already-COMPLETED match must fail.
 select throws_ok(

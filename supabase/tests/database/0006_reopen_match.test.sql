@@ -62,9 +62,9 @@ insert into rallies (game_id, player_id, event_type, created_by, winning_team_id
   select '00000000-0000-0000-0000-00000000f504', null, 'SPLIT', '00000000-0000-0000-0000-00000000b501',
          '00000000-0000-0000-0000-00000000f503'
   from generate_series(1, 15);
-insert into rallies (game_id, player_id, event_type, created_by, winning_team_id)
+insert into rallies (game_id, player_id, event_type, created_by, winning_team_id, losing_player_id)
   select '00000000-0000-0000-0000-00000000f504', '00000000-0000-0000-0000-00000000c501', 'WINNER',
-         '00000000-0000-0000-0000-00000000b501', '00000000-0000-0000-0000-00000000f502'
+         '00000000-0000-0000-0000-00000000b501', '00000000-0000-0000-0000-00000000f502', '00000000-0000-0000-0000-00000000c502'
   from generate_series(1, 21);
 
 select complete_match('00000000-0000-0000-0000-00000000f501');

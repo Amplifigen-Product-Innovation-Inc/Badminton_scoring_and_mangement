@@ -28,15 +28,20 @@ type Game = {
   rallies: { winningTeamId: string }[];
 };
 
-// §23 rally flow, single-tap for the common case: "Who took the winning
-// shot?" is asked first — tapping a player submits a WINNER for them
-// immediately, no second tap. Only when there was no clean winning shot
-// does the scorer move to "who dropped" (tapping a player there submits a
-// DROP, crediting the opposing team) — that's also where Split lives
-// ("can't even say who dropped it", not "can't say who won", so it
-// belongs on this step rather than the first one) and picking Split opens
-// one more small step to say which team the point actually goes to.
-type Step = "winner" | "drop" | "split";
+// §23/0013 rally flow: "Who took the winning shot?" is asked first —
+// tapping a player there is now a SELECTION, not an immediate submit. It
+// advances to a mandatory second question, "Who dropped it?", restricted
+// to the OPPOSING team (the specific player who missed the winning shot) —
+// only once that's answered does the rally actually submit, as a paired
+// WINNER + losing_player_id (0013_rally_drop_attribution.sql). Only when
+// there was no clean winning shot does the scorer instead pick "No winning
+// shot" and move to the single-attribution "drop" step (tapping a player
+// there submits a DROP immediately, crediting the opposing team) — that's
+// also where Split lives ("can't even say who dropped it", not "can't say
+// who won", so it belongs on this step rather than the first one) and
+// picking Split opens one more small step to say which team the point
+// actually goes to.
+type Step = "winner" | "winner-drop" | "drop" | "split";
 
 /**
  * §23/§55 — the highest-priority screen in the app. Flow: tap a player (or
@@ -69,6 +74,7 @@ export function LiveScoringScreen({
   team1,
   team2,
   games,
+  firstServerPlayerId,
 }: {
   matchId: string;
   matchNumber: number;
@@ -89,9 +95,16 @@ export function LiveScoringScreen({
   team1: Team;
   team2: Team;
   games: Game[];
+  /** 0014_first_server.sql — the scorer's answer to "who's serving first?",
+   * asked once at match start. Only seeds game 1 (see serve.ts). */
+  firstServerPlayerId: string | null;
 }) {
   const router = useRouter();
   const [step, setStep] = useState<Step>("winner");
+  // Set while step === "winner-drop": the winner tapped on the first
+  // step, held until the mandatory second (who dropped it) tap completes
+  // the pair and actually submits the rally.
+  const [pendingWinner, setPendingWinner] = useState<{ player: Player; team: Team } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   // §33 — track only which action failed, never the raw Supabase/Postgres
   // message; the copy shown per action is a fixed, human string below.
@@ -128,7 +141,7 @@ export function LiveScoringScreen({
         </h1>
         <p className="mt-2 text-neutral-500">Not started yet.</p>
         <div className="mt-6">
-          <StartMatchButton matchId={matchId} />
+          <StartMatchButton matchId={matchId} team1={team1} team2={team2} />
         </div>
       </main>
     );
@@ -221,17 +234,32 @@ export function LiveScoringScreen({
   const isFinalPoint = score1 === maxScore - 1 && score2 === maxScore - 1;
 
   // Who's serving — derived automatically from the rally history the
-  // scorer is already recording (see computeCurrentServer); never asked
-  // for directly. Includes the optimistic in-flight rally so the "Serving"
-  // label updates in step with the score instead of lagging a round trip.
+  // scorer is already recording (see computeCurrentServer), seeded for
+  // game 1 by the scorer's one-time "who's serving first?" answer
+  // (0014_first_server.sql) — never asked again after that. Includes the
+  // optimistic in-flight rally so the "Serving" label updates in step with
+  // the score instead of lagging a round trip.
   const rulesRallies = optimisticIsCurrent
     ? [...currentGame.rallies, { winningTeamId: optimistic.winningTeamId }]
     : currentGame.rallies;
-  const serverState = computeCurrentServer(rulesRallies, team1, team2);
+  const firstServer =
+    currentGame.game_number === 1 && firstServerPlayerId
+      ? {
+          teamId: team1.players.some((p) => p.id === firstServerPlayerId) ? team1.id : team2.id,
+          playerId: firstServerPlayerId,
+        }
+      : undefined;
+  const serverState = computeCurrentServer(rulesRallies, team1, team2, firstServer);
 
-  function submitRally(playerId: string | null, eventType: "WINNER" | "DROP" | "SPLIT", winningTeamId: string) {
+  function submitRally(
+    playerId: string | null,
+    eventType: "WINNER" | "DROP" | "SPLIT",
+    winningTeamId: string,
+    losingPlayerId: string | null
+  ) {
     setErrorAction(null);
     setStep("winner");
+    setPendingWinner(null);
 
     const id = crypto.randomUUID();
     const args: Parameters<typeof recordRally>[0] = {
@@ -241,6 +269,7 @@ export function LiveScoringScreen({
       playerId,
       eventType,
       winningTeamId,
+      losingPlayerId,
     };
     pendingSubmission.current = { id, args };
 
@@ -408,7 +437,10 @@ export function LiveScoringScreen({
                     <button
                       key={p.id}
                       disabled={isSubmitting}
-                      onClick={() => submitRally(p.id, "WINNER", team.id)}
+                      onClick={() => {
+                        setPendingWinner({ player: p, team });
+                        setStep("winner-drop");
+                      }}
                       className="min-h-[72px] rounded-xl border border-surface-border bg-surface py-5 text-lg font-semibold text-neutral-900 shadow-sm transition-colors active:bg-neutral-100 disabled:opacity-50"
                     >
                       {p.name}
@@ -426,6 +458,38 @@ export function LiveScoringScreen({
             </>
           )}
 
+          {step === "winner-drop" && pendingWinner && (
+            <>
+              <p className="text-center text-sm font-medium text-neutral-500">Who dropped it?</p>
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                {(pendingWinner.team.id === team1.id ? team2 : team1).players.map((p) => (
+                  <button
+                    key={p.id}
+                    disabled={isSubmitting}
+                    onClick={() =>
+                      submitRally(pendingWinner.player.id, "WINNER", pendingWinner.team.id, p.id)
+                    }
+                    className="min-h-[72px] rounded-xl border border-surface-border bg-surface py-5 text-lg font-semibold text-neutral-900 shadow-sm transition-colors active:bg-neutral-100 disabled:opacity-50"
+                  >
+                    {p.name}
+                  </button>
+                ))}
+              </div>
+              <Button
+                variant="ghost"
+                size="md"
+                className="mt-3 w-full"
+                disabled={isSubmitting}
+                onClick={() => {
+                  setPendingWinner(null);
+                  setStep("winner");
+                }}
+              >
+                Back
+              </Button>
+            </>
+          )}
+
           {step === "drop" && (
             <>
               <p className="text-center text-sm font-medium text-neutral-500">Who dropped?</p>
@@ -436,7 +500,7 @@ export function LiveScoringScreen({
                       key={p.id}
                       disabled={isSubmitting}
                       onClick={() =>
-                        submitRally(p.id, "DROP", team.id === team1.id ? team2.id : team1.id)
+                        submitRally(p.id, "DROP", team.id === team1.id ? team2.id : team1.id, null)
                       }
                       className="min-h-[72px] rounded-xl border border-surface-border bg-surface py-5 text-lg font-semibold text-neutral-900 shadow-sm transition-colors active:bg-neutral-100 disabled:opacity-50"
                     >
@@ -472,14 +536,14 @@ export function LiveScoringScreen({
               <div className="mt-3 grid grid-cols-2 gap-3">
                 <button
                   disabled={isSubmitting}
-                  onClick={() => submitRally(null, "SPLIT", team1.id)}
+                  onClick={() => submitRally(null, "SPLIT", team1.id, null)}
                   className="min-h-[72px] rounded-xl border border-surface-border bg-surface py-6 text-lg font-semibold text-neutral-900 active:bg-neutral-100 disabled:opacity-50"
                 >
                   {teamLabel(team1)}
                 </button>
                 <button
                   disabled={isSubmitting}
-                  onClick={() => submitRally(null, "SPLIT", team2.id)}
+                  onClick={() => submitRally(null, "SPLIT", team2.id, null)}
                   className="min-h-[72px] rounded-xl border border-surface-border bg-surface py-6 text-lg font-semibold text-neutral-900 active:bg-neutral-100 disabled:opacity-50"
                 >
                   {teamLabel(team2)}

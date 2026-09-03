@@ -7,10 +7,19 @@ import { recordRallySchema } from "@/lib/validation/rally";
 export type ScorerActionResult = { status: "ok" } | { status: "error"; message: string };
 
 /** §29/4.8 — SCHEDULED -> LIVE, creates game 1. Thin wrapper over the RPC;
- * all authorization/validity lives there (start_match, 0006_match_lifecycle.sql). */
-export async function startMatch(matchId: string): Promise<ScorerActionResult> {
+ * all authorization/validity lives there (start_match, 0006_match_lifecycle.sql).
+ * `firstServerPlayerId` (0014_first_server.sql) is the scorer's answer to
+ * "who's serving first?", asked once at match start — stored on the match
+ * and used to seed computeCurrentServer for game 1. */
+export async function startMatch(
+  matchId: string,
+  firstServerPlayerId: string
+): Promise<ScorerActionResult> {
   const supabase = await createClient();
-  const { error } = await supabase.rpc("start_match", { p_match_id: matchId });
+  const { error } = await supabase.rpc("start_match", {
+    p_match_id: matchId,
+    p_first_server_player_id: firstServerPlayerId,
+  });
 
   if (error) return { status: "error", message: error.message };
 
@@ -53,6 +62,7 @@ export async function recordRally(input: unknown): Promise<ScorerActionResult> {
     player_id: parsed.data.playerId,
     event_type: parsed.data.eventType,
     winning_team_id: parsed.data.winningTeamId,
+    losing_player_id: parsed.data.losingPlayerId,
     created_by: profile.id,
   });
 

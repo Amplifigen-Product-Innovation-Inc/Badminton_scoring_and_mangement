@@ -72,6 +72,23 @@ describe("computeCurrentServer", () => {
     expect(state.server?.id).toBe("b1"); // team2 score still 0 (even) -> right = b1, untouched
   });
 
+  it("firstServer (0014): seeds game 1's starting side/player instead of the team1-default", () => {
+    const state = computeCurrentServer([], d1, d2, { teamId: "t2", playerId: "b2" });
+    expect(state.servingTeamId).toBe("t2");
+    expect(state.server?.id).toBe("b2");
+  });
+
+  it("firstServer: the chosen player still serves first after later rallies (positions seeded, not just displayed once)", () => {
+    const state = computeCurrentServer([{ winningTeamId: "t2" }], d1, d2, {
+      teamId: "t2",
+      playerId: "b2",
+    });
+    // team2 (serving from the start, b2 at "right") wins its first rally:
+    // same server continues, court just swaps them to "left" (score 1, odd).
+    expect(state.servingTeamId).toBe("t2");
+    expect(state.server?.id).toBe("b2");
+  });
+
   it("doubles: server alternates court and identity correctly over a longer sequence", () => {
     const rallies = [
       { winningTeamId: "t1" }, // t1: 1-0, same server a1 continues (positions swap)

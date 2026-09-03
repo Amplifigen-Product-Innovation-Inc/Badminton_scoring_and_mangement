@@ -75,10 +75,10 @@ insert into group_players (group_id, player_id) values
 select _mk_match('00000000-0000-0000-0000-00000000ba11', '00000000-0000-0000-0000-00000000ea11', 1,
   '00000000-0000-0000-0000-00000000fa11', '00000000-0000-0000-0000-00000000fa12',
   '00000000-0000-0000-0000-00000000ca11', '00000000-0000-0000-0000-00000000ca12');
-insert into rallies (game_id, player_id, event_type, created_by, winning_team_id)
+insert into rallies (game_id, player_id, event_type, created_by, winning_team_id, losing_player_id)
   select (select id from games where match_id = '00000000-0000-0000-0000-00000000ba11'),
          '00000000-0000-0000-0000-00000000ca11', 'WINNER', '00000000-0000-0000-0000-00000000b401',
-         '00000000-0000-0000-0000-00000000fa11'
+         '00000000-0000-0000-0000-00000000fa11', '00000000-0000-0000-0000-00000000ca12'
   from generate_series(1, 21);
 select complete_match('00000000-0000-0000-0000-00000000ba11');
 
@@ -220,10 +220,10 @@ insert into group_players (group_id, player_id) values
 select _mk_match('00000000-0000-0000-0000-00000000ba31', '00000000-0000-0000-0000-00000000ea13', 6,
   '00000000-0000-0000-0000-00000000fc11', '00000000-0000-0000-0000-00000000fc12',
   '00000000-0000-0000-0000-00000000ca31', '00000000-0000-0000-0000-00000000ca33');
-insert into rallies (game_id, player_id, event_type, created_by, winning_team_id)
+insert into rallies (game_id, player_id, event_type, created_by, winning_team_id, losing_player_id)
   select (select id from games where match_id = '00000000-0000-0000-0000-00000000ba31'),
          '00000000-0000-0000-0000-00000000ca31', 'WINNER', '00000000-0000-0000-0000-00000000b401',
-         '00000000-0000-0000-0000-00000000fc11'
+         '00000000-0000-0000-0000-00000000fc11', '00000000-0000-0000-0000-00000000ca33'
   from generate_series(1, 21);
 select complete_match('00000000-0000-0000-0000-00000000ba31');
 
@@ -233,15 +233,10 @@ select complete_match('00000000-0000-0000-0000-00000000ba31');
 select _mk_match('00000000-0000-0000-0000-00000000ba32', '00000000-0000-0000-0000-00000000ea13', 7,
   '00000000-0000-0000-0000-00000000fc21', '00000000-0000-0000-0000-00000000fc22',
   '00000000-0000-0000-0000-00000000ca32', '00000000-0000-0000-0000-00000000ca33');
-insert into rallies (game_id, player_id, event_type, created_by, winning_team_id)
-  select (select id from games where match_id = '00000000-0000-0000-0000-00000000ba32'),
-         '00000000-0000-0000-0000-00000000ca32', 'WINNER', '00000000-0000-0000-0000-00000000b401',
-         '00000000-0000-0000-0000-00000000fc21'
-  from generate_series(1, 15);
-insert into rallies (game_id, player_id, event_type, created_by, winning_team_id)
-  select (select id from games where match_id = '00000000-0000-0000-0000-00000000ba32'),
-         null, 'SPLIT', '00000000-0000-0000-0000-00000000b401', '00000000-0000-0000-0000-00000000fc21'
-  from generate_series(1, 6);
+-- pc3's (below-target) 10 points must land FIRST — since 0012's game-status
+-- guard, an insert into an already-COMPLETED game is rejected for every
+-- role, and pc2's 21 (15 WINNER + 6 SPLIT) landing first would complete
+-- the game at 21-0 before pc3's 10 ever got recorded.
 insert into rallies (game_id, player_id, event_type, created_by, winning_team_id)
   select (select id from games where match_id = '00000000-0000-0000-0000-00000000ba32'),
          null, 'SPLIT', '00000000-0000-0000-0000-00000000b401', '00000000-0000-0000-0000-00000000fc22'
@@ -251,6 +246,15 @@ insert into rallies (game_id, player_id, event_type, created_by, winning_team_id
          '00000000-0000-0000-0000-00000000ca32', 'DROP', '00000000-0000-0000-0000-00000000b401',
          '00000000-0000-0000-0000-00000000fc22'
   from generate_series(1, 2);
+insert into rallies (game_id, player_id, event_type, created_by, winning_team_id)
+  select (select id from games where match_id = '00000000-0000-0000-0000-00000000ba32'),
+         null, 'SPLIT', '00000000-0000-0000-0000-00000000b401', '00000000-0000-0000-0000-00000000fc21'
+  from generate_series(1, 6);
+insert into rallies (game_id, player_id, event_type, created_by, winning_team_id, losing_player_id)
+  select (select id from games where match_id = '00000000-0000-0000-0000-00000000ba32'),
+         '00000000-0000-0000-0000-00000000ca32', 'WINNER', '00000000-0000-0000-0000-00000000b401',
+         '00000000-0000-0000-0000-00000000fc21', '00000000-0000-0000-0000-00000000ca33'
+  from generate_series(1, 15);
 select complete_match('00000000-0000-0000-0000-00000000ba32');
 
 select is(
