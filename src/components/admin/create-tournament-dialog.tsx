@@ -3,9 +3,16 @@
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createTournament } from "@/app/admin/tournaments/actions";
+import { tournamentFormatValues } from "@/lib/validation/tournament";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ErrorState } from "@/components/ui/error-state";
+
+const FORMAT_LABELS: Record<(typeof tournamentFormatValues)[number], string> = {
+  SINGLES: "Singles",
+  DOUBLES: "Doubles",
+  MIXED_DOUBLES: "Mixed Doubles",
+};
 
 /** §10 "+ Create Tournament". Inline panel, not a modal — consistent with
  * AddPlayerDialog (§54: avoid unnecessary modals).
@@ -92,11 +99,18 @@ export function CreateTournamentDialog() {
           placeholder="Location"
           className="w-full rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand-500"
         />
-        <input
+        <select
           name="format"
-          placeholder="Format (e.g. Singles, round-robin groups)"
+          defaultValue=""
           className="w-full rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand-500"
-        />
+        >
+          <option value="">Format (optional)</option>
+          {tournamentFormatValues.map((f) => (
+            <option key={f} value={f}>
+              {FORMAT_LABELS[f]}
+            </option>
+          ))}
+        </select>
         <textarea
           name="description"
           rows={3}

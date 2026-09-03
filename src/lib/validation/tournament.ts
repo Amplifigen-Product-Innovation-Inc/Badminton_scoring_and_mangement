@@ -16,11 +16,16 @@ export const tournamentStatusValues = [
   "CANCELLED",
 ] as const;
 
+// `format` used to be free text ("Singles, round-robin groups", etc.) — now a
+// fixed dropdown so the value is actually usable elsewhere (e.g. defaulting
+// match_type when creating matches) instead of an unstructured description.
+export const tournamentFormatValues = ["SINGLES", "DOUBLES", "MIXED_DOUBLES"] as const;
+
 export const createTournamentSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(200),
   date: z.preprocess(emptyToNull, z.string().date().nullable()),
   location: z.preprocess(emptyToNull, z.string().trim().max(200).nullable()),
-  format: z.preprocess(emptyToNull, z.string().trim().max(100).nullable()),
+  format: z.preprocess(emptyToNull, z.enum(tournamentFormatValues).nullable()),
   num_courts: z.preprocess(
     emptyToNull,
     z.coerce.number().int().positive().nullable()
