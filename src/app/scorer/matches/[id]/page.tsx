@@ -17,7 +17,8 @@ export default async function ScorerMatchPage({ params }: { params: Promise<{ id
       `id, match_number, match_type, best_of, status,
        courts(name), tournaments(name),
        teams!teams_match_id_fkey(id, team_number, match_participants(players(id, name))),
-       games(id, game_number, status, team_1_score, team_2_score, winner_team_id)`
+       games(id, game_number, status, team_1_score, team_2_score, winner_team_id,
+             rallies(winning_team_id, sequence_number))`
     )
     .eq("id", id)
     .maybeSingle();
@@ -36,7 +37,14 @@ export default async function ScorerMatchPage({ params }: { params: Promise<{ id
       .map((mp) => mp.players)
       .filter((p): p is { id: string; name: string } => p != null);
 
-  const games = [...(match.games ?? [])].sort((a, b) => a.game_number - b.game_number);
+  const games = [...(match.games ?? [])]
+    .sort((a, b) => a.game_number - b.game_number)
+    .map((g) => ({
+      ...g,
+      rallies: [...(g.rallies ?? [])]
+        .sort((a, b) => a.sequence_number - b.sequence_number)
+        .map((r) => ({ winningTeamId: r.winning_team_id })),
+    }));
 
   return (
     <LiveScoringScreen

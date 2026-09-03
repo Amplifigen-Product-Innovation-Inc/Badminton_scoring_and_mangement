@@ -14,6 +14,7 @@ import { Card } from "@/components/ui/card";
 import { LiveBadge, Badge } from "@/components/ui/badge";
 import { ScoreDisplay } from "@/components/ui/score-display";
 import { ErrorState } from "@/components/ui/error-state";
+import { computeCurrentServer } from "@/lib/scoring/serve";
 
 type Player = { id: string; name: string };
 type Team = { id: string; players: Player[] };
@@ -24,6 +25,7 @@ type Game = {
   team_1_score: number;
   team_2_score: number;
   winner_team_id: string | null;
+  rallies: { winningTeamId: string }[];
 };
 
 type Selection = { kind: "player"; player: Player; team: Team } | { kind: "split" } | null;
@@ -87,6 +89,7 @@ export function LiveScoringScreen({
     baseScore2: number;
     team1: number;
     team2: number;
+    winningTeamId: string;
   } | null>(null);
   const pendingSubmission = useRef<{ id: string; args: Parameters<typeof recordRally>[0] } | null>(
     null
@@ -190,6 +193,15 @@ export function LiveScoringScreen({
   const isDeuce = score1 >= 20 && score2 >= 20 && Math.abs(score1 - score2) < 2 && rallyPoint < 30;
   const isFinalPoint = score1 === 29 && score2 === 29;
 
+  // Who's serving — derived automatically from the rally history the
+  // scorer is already recording (see computeCurrentServer); never asked
+  // for directly. Includes the optimistic in-flight rally so the "Serving"
+  // label updates in step with the score instead of lagging a round trip.
+  const rulesRallies = optimisticIsCurrent
+    ? [...currentGame.rallies, { winningTeamId: optimistic.winningTeamId }]
+    : currentGame.rallies;
+  const serverState = computeCurrentServer(rulesRallies, team1, team2);
+
   function submitRally(playerId: string | null, eventType: "WINNER" | "DROP" | "SPLIT", winningTeamId: string) {
     setErrorAction(null);
     setSelection(null);
@@ -210,6 +222,7 @@ export function LiveScoringScreen({
       baseScore2: currentGame.team_2_score,
       team1: currentGame.team_1_score + (winningTeamId === team1.id ? 1 : 0),
       team2: currentGame.team_2_score + (winningTeamId === team2.id ? 1 : 0),
+      winningTeamId,
     });
 
     doSubmit(args);
@@ -299,10 +312,20 @@ export function LiveScoringScreen({
         <Card className="text-center" padding="lg">
           <p className="truncate text-sm font-semibold text-neutral-600">{teamLabel(team1)}</p>
           <ScoreDisplay value={score1} size="xl" className="mt-1 block text-neutral-900" />
+          {gameInProgress && serverState.servingTeamId === team1.id && (
+            <p className="mt-1 truncate text-xs font-medium text-brand-600">
+              {serveLabel(team1, serverState.server)}
+            </p>
+          )}
         </Card>
         <Card className="text-center" padding="lg">
           <p className="truncate text-sm font-semibold text-neutral-600">{teamLabel(team2)}</p>
           <ScoreDisplay value={score2} size="xl" className="mt-1 block text-neutral-900" />
+          {gameInProgress && serverState.servingTeamId === team2.id && (
+            <p className="mt-1 truncate text-xs font-medium text-brand-600">
+              {serveLabel(team2, serverState.server)}
+            </p>
+          )}
         </Card>
       </div>
 
@@ -489,4 +512,11 @@ export function LiveScoringScreen({
 
 function teamLabel(team: Team) {
   return team.players.map((p) => p.name).join(" / ");
+}
+
+// Singles: naming the server would just repeat the team label right above
+// it, so only doubles needs the "which partner" detail.
+function serveLabel(team: Team, server: { id: string; name: string } | null) {
+  if (team.players.length <= 1 || !server) return "🏸 Serving";
+  return `🏸 Serving: ${server.name}`;
 }
