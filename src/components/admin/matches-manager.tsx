@@ -7,6 +7,7 @@ import {
   createMatch,
   deleteMatch,
   reopenMatch,
+  resetMatch,
 } from "@/app/admin/tournaments/match-actions";
 import { bestOfValues, matchTypeValues } from "@/lib/validation/match";
 import { Card } from "@/components/ui/card";
@@ -203,6 +204,21 @@ export function MatchesManager({
     });
   }
 
+  function handleReset(match: Match) {
+    if (
+      !confirm(
+        `Reset match #${match.matchNumber}? This PERMANENTLY DELETES all its rallies and games and returns it to SCHEDULED (0-0, not started). This cannot be undone — use this only when it's faster to start the match over than to correct individual rallies.`
+      )
+    ) {
+      return;
+    }
+    startTransition(async () => {
+      const res = await resetMatch(match.id, tournamentId);
+      if (res.status === "error") setError(res.message);
+      else router.refresh();
+    });
+  }
+
   if (stages.length === 0) {
     return (
       <Card padding="lg">
@@ -293,6 +309,15 @@ export function MatchesManager({
                   className="text-sm text-neutral-500 hover:text-neutral-900 disabled:opacity-50"
                 >
                   Reopen
+                </button>
+              )}
+              {(m.status === "LIVE" || m.status === "COMPLETED" || m.status === "CANCELLED") && (
+                <button
+                  onClick={() => handleReset(m)}
+                  disabled={isPending}
+                  className="text-sm text-error-500 hover:text-error-700 disabled:opacity-50"
+                >
+                  Reset
                 </button>
               )}
             </div>

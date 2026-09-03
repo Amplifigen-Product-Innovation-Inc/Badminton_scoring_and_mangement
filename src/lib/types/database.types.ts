@@ -295,6 +295,7 @@ export type Database = {
           best_of: number
           completed_at: string | null
           court_id: string | null
+          first_server_player_id: string | null
           group_id: string | null
           id: string
           match_number: number
@@ -310,6 +311,7 @@ export type Database = {
           best_of?: number
           completed_at?: string | null
           court_id?: string | null
+          first_server_player_id?: string | null
           group_id?: string | null
           id?: string
           match_number: number
@@ -325,6 +327,7 @@ export type Database = {
           best_of?: number
           completed_at?: string | null
           court_id?: string | null
+          first_server_player_id?: string | null
           group_id?: string | null
           id?: string
           match_number?: number
@@ -342,6 +345,20 @@ export type Database = {
             columns: ["court_id"]
             isOneToOne: false
             referencedRelation: "courts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "matches_first_server_player_id_fkey"
+            columns: ["first_server_player_id"]
+            isOneToOne: false
+            referencedRelation: "player_directory"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "matches_first_server_player_id_fkey"
+            columns: ["first_server_player_id"]
+            isOneToOne: false
+            referencedRelation: "players"
             referencedColumns: ["id"]
           },
           {
@@ -568,6 +585,7 @@ export type Database = {
           event_type: Database["public"]["Enums"]["rally_event_type"]
           game_id: string
           id: string
+          losing_player_id: string | null
           player_id: string | null
           sequence_number: number
           winning_team_id: string
@@ -578,6 +596,7 @@ export type Database = {
           event_type: Database["public"]["Enums"]["rally_event_type"]
           game_id: string
           id?: string
+          losing_player_id?: string | null
           player_id?: string | null
           sequence_number?: never
           winning_team_id: string
@@ -588,6 +607,7 @@ export type Database = {
           event_type?: Database["public"]["Enums"]["rally_event_type"]
           game_id?: string
           id?: string
+          losing_player_id?: string | null
           player_id?: string | null
           sequence_number?: never
           winning_team_id?: string
@@ -605,6 +625,20 @@ export type Database = {
             columns: ["game_id"]
             isOneToOne: false
             referencedRelation: "games"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rallies_losing_player_id_fkey"
+            columns: ["losing_player_id"]
+            isOneToOne: false
+            referencedRelation: "player_directory"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rallies_losing_player_id_fkey"
+            columns: ["losing_player_id"]
+            isOneToOne: false
+            referencedRelation: "players"
             referencedColumns: ["id"]
           },
           {
@@ -1073,7 +1107,11 @@ export type Database = {
       }
       recompute_game_score: { Args: { p_game_id: string }; Returns: undefined }
       reopen_match: { Args: { p_match_id: string }; Returns: undefined }
-      start_match: { Args: { p_match_id: string }; Returns: undefined }
+      reset_match: { Args: { p_match_id: string }; Returns: undefined }
+      start_match: {
+        Args: { p_first_server_player_id?: string; p_match_id: string }
+        Returns: undefined
+      }
       start_next_game: { Args: { p_match_id: string }; Returns: undefined }
       undo_last_rally: { Args: { p_game_id: string }; Returns: undefined }
     }

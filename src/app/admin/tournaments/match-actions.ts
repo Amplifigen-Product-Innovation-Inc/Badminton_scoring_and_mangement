@@ -169,3 +169,21 @@ export async function reopenMatch(matchId: string, tournamentId: string): Promis
   revalidatePath(`/admin/tournaments/${tournamentId}`);
   return { status: "ok" };
 }
+
+/**
+ * "Reset match" — thin wrapper over the reset_match RPC
+ * (0015_reset_match.sql): wipes every rally/game for a match and returns
+ * it to a fresh SCHEDULED state (teams/players stay assigned). Strictly
+ * more destructive than reopenMatch above (that keeps rally history for
+ * correction; this discards it entirely) — for when a match was scored
+ * so wrong that starting over is faster than fixing individual rallies.
+ */
+export async function resetMatch(matchId: string, tournamentId: string): Promise<MatchActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("reset_match", { p_match_id: matchId });
+
+  if (error) return { status: "error", message: error.message };
+
+  revalidatePath(`/admin/tournaments/${tournamentId}`);
+  return { status: "ok" };
+}
