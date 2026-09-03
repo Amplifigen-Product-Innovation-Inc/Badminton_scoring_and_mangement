@@ -145,6 +145,38 @@ export function GroupsManager({
                   />
                 )}
                 {stage.groups.map((group) => {
+                  // 0016 — the "Random" group under a CROSS_CATEGORY stage
+                  // is auto-populated by computeGroupQualification, purely
+                  // for display (who's qualified, pooled together across
+                  // every original group) — it has no matches/standings of
+                  // its own, so it's rendered read-only rather than as a
+                  // normal editable group with its own qualify button.
+                  if (stage.stage_type === "CROSS_CATEGORY" && group.name === "Random") {
+                    return (
+                      <div key={group.id} className="rounded-lg border border-surface-border p-3">
+                        <p className="flex items-center gap-2 text-sm font-medium text-neutral-900">
+                          {group.name}
+                          <Badge tone="neutral">Auto-populated</Badge>
+                        </p>
+                        <p className="mt-1 text-xs text-neutral-400">
+                          Every player who has qualified out of a group stage, pooled together —
+                          this fills in automatically and isn&apos;t edited directly.
+                        </p>
+                        <div className="mt-3 space-y-1 border-t border-neutral-100 pt-3">
+                          {group.players.length === 0 ? (
+                            <p className="text-sm text-neutral-400">No one has qualified yet.</p>
+                          ) : (
+                            group.players.map((p) => (
+                              <p key={p.id} className="text-sm text-neutral-800">
+                                {p.name}
+                              </p>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    );
+                  }
+
                   const qualifiedIds = new Set(group.qualifications.map((q) => q.playerId));
                   const rankOf = new Map(group.qualifications.map((q) => [q.playerId, q.rank]));
                   const hasStandings = group.standings.length > 0;
